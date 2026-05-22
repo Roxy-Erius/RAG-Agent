@@ -16,16 +16,23 @@ chromadb:
   collection-name: products
 
 # ==================== 火山引擎 API 配置 ====================
-# API Key 通过环境变量注入，不要硬编码到代码中
-# Windows 设置环境变量：setx VOLCENGINE_API_KEY "你的key"
 volcengine:
-  api-key: ${VOLCENGINE_API_KEY:你的API_KEY}
   base-url: https://ark.cn-beijing.volces.com/api/v3
-  model-id: 你的模型endpoint-id
-  embedding-model: doubao-embedding-vision
+  # Chat 模型
+  chat:
+    api-key: 你的chat模型API_KEY
+    model-id: 你的chat模型endpoint-id
+  # Embedding 模型
+  embedding:
+    api-key: 你的embedding模型API_KEY
+    model: doubao-embedding-vision-251215
 
 # ==================== RAG 参数 ====================
 rag:
   top-k: 3
   similarity-threshold: 0.5
   max-context-messages: 10
+
+# ==================== 数据集路径 ====================
+dataset:
+  path: ../ecommerce_agent_dataset
