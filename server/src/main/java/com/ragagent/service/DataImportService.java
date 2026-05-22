@@ -7,6 +7,7 @@ import com.google.gson.JsonObject;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.boot.CommandLineRunner;
+import org.springframework.core.annotation.Order;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Component;
 
@@ -27,6 +28,7 @@ import java.nio.file.Paths;
  *   └── 4_食品生活/data/p_food_001.json ...
  */
 @Component
+@Order(0)
 public class DataImportService implements CommandLineRunner {
 
     private static final Logger log = LoggerFactory.getLogger(DataImportService.class);
