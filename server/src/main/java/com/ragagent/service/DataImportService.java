@@ -6,6 +6,7 @@ import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.CommandLineRunner;
 import org.springframework.core.annotation.Order;
 import org.springframework.jdbc.core.JdbcTemplate;
@@ -18,15 +19,6 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 
-/**
- * 启动时自动扫描 data 目录下的 JSON 文件，导入 MySQL。
- * 数据集目录结构：
- *   ecommerce_agent_dataset/
- *   ├── 1_美妆护肤/data/p_beauty_001.json ...
- *   ├── 2_数码电子/data/p_digital_001.json ...
- *   ├── 3_服饰运动/data/p_clothes_001.json ...
- *   └── 4_食品生活/data/p_food_001.json ...
- */
 @Component
 @Order(0)
 public class DataImportService implements CommandLineRunner {
@@ -34,6 +26,9 @@ public class DataImportService implements CommandLineRunner {
     private static final Logger log = LoggerFactory.getLogger(DataImportService.class);
     private final JdbcTemplate jdbc;
     private final Gson gson = new Gson();
+
+    @Value("${dataset.path:../ecommerce_agent_dataset}")
+    private String datasetPath;
 
     public DataImportService(JdbcTemplate jdbc) {
         this.jdbc = jdbc;
@@ -48,8 +43,8 @@ public class DataImportService implements CommandLineRunner {
             return;
         }
 
-        // 扫描数据集目录（相对于 server/ 的上级目录）
-        Path datasetDir = Paths.get("../ecommerce_agent_dataset");
+        // 扫描数据集目录
+        Path datasetDir = Paths.get(datasetPath);
         if (!datasetDir.toFile().exists()) {
             log.warn("数据集目录不存在: {}，请将 ecommerce_agent_dataset 放到项目根目录", datasetDir.toAbsolutePath());
             return;
