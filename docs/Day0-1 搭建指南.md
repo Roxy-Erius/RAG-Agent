@@ -41,19 +41,19 @@ docker rm -f chromadb     # 删除重建
 ### 方式一：你已有本地 MySQL
 
 1. 打开 MySQL 客户端（Navicat / DBeaver / IDEA Database）
-2. 连接 localhost:3306，用户名 root，密码 root123456（或你自己的密码）
+2. 连接 localhost:3306，用户名 root，密码为你设置的 MySQL 密码
 3. 执行 `data/init.sql` 脚本（项目根目录下）
 
 ### 方式二：用 Docker 运行 MySQL
 
 ```bash
 docker pull mysql:8.0
-docker run -d --name mysql8 -p 3306:3306 -e MYSQL_ROOT_PASSWORD=root123456 mysql:8.0
+docker run -d --name mysql8 -p 3306:3306 -e MYSQL_ROOT_PASSWORD=你的MySQL密码 mysql:8.0
 ```
 
 然后进入 MySQL 执行 init.sql：
 ```bash
-docker exec -it mysql8 mysql -uroot -proot123456
+docker exec -it mysql8 mysql -uroot -p你的MySQL密码
 # 进入后执行：
 source /path/to/init.sql
 ```
