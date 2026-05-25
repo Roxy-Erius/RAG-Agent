@@ -1,5 +1,6 @@
 package com.ragagent.service;
 
+import com.ragagent.config.RagConfig;
 import com.ragagent.model.ProductSearchResult;
 import dev.langchain4j.data.message.AiMessage;
 import dev.langchain4j.data.message.ChatMessage;
@@ -21,18 +22,22 @@ import java.util.regex.Pattern;
 public class ChatService {
 
     private static final Logger log = LoggerFactory.getLogger(ChatService.class);
-    private static final int RETRIEVAL_TOP_K = 3;
 
     private static final String SYSTEM_PROMPT_TEMPLATE = """
-            你是一个专业的电商导购助手。你的职责是根据用户需求，从商品库中推荐合适的商品。
+            你是一个专业的电商导购助手。你的职责是根据用户需求，从商品库中推荐最合适的商品。
 
             ## 严格规则
             1. 你只能推荐下方【商品库】中列出的商品，绝对不能推荐不存在的商品
             2. 你不能编造商品的价格、规格、优惠信息等任何参数
             3. 如果商品库中没有匹配的商品，请如实告知用户，不要编造
-            4. 推荐时请给出具体理由，结合商品的实际特点
-            5. 回复要简洁专业，适合移动端阅读，控制在200字以内
-            6. 当用户需求模糊时，主动提问引导用户细化需求
+            4. 回复要简洁专业，适合移动端阅读，控制在200字以内
+            5. 当用户需求模糊时，主动提问引导用户细化需求
+
+            ## 推荐技巧
+            - 结合商品的实际卖点和用户需求，给出1-2句有说服力的推荐理由
+            - 优先推荐与用户需求最匹配的商品，而非简单罗列
+            - 如果有多款合适的商品，简要对比它们的关键差异
+            - 提及价格时结合性价比做出评价
 
             ## 输出格式（重要！）
             - 正常回复使用纯文本
@@ -45,13 +50,16 @@ public class ChatService {
 
     private static final Pattern PRODUCT_TAG_PATTERN = Pattern.compile("\\[PRODUCT:(\\w+)]");
 
+    private final RagConfig ragConfig;
     private final RetrieverService retrieverService;
     private final OpenAiStreamingChatModel streamingChatModel;
     private final SessionService sessionService;
 
-    public ChatService(RetrieverService retrieverService,
+    public ChatService(RagConfig ragConfig,
+                       RetrieverService retrieverService,
                        OpenAiStreamingChatModel streamingChatModel,
                        SessionService sessionService) {
+        this.ragConfig = ragConfig;
         this.retrieverService = retrieverService;
         this.streamingChatModel = streamingChatModel;
         this.sessionService = sessionService;
@@ -63,7 +71,7 @@ public class ChatService {
     public void chatStream(String sessionId, String userMessage, SseEmitter emitter) {
         try {
             // ① Retrieval: 检索相关商品（带完整信息 + score）
-            List<ProductSearchResult> products = retrieverService.retrieveProductsByText(userMessage, RETRIEVAL_TOP_K, null);
+            List<ProductSearchResult> products = retrieverService.retrieveProductsByText(userMessage, ragConfig.getTopK(), null);
             log.info("检索到 {} 条商品，sessionId={}", products.size(), sessionId);
 
             // ② Augmentation: 拼装上下文
@@ -123,7 +131,7 @@ public class ChatService {
      * 非流式对话（备用）
      */
     public String chat(String sessionId, String userMessage) {
-        List<ProductSearchResult> products = retrieverService.retrieveProductsByText(userMessage, RETRIEVAL_TOP_K, null);
+        List<ProductSearchResult> products = retrieverService.retrieveProductsByText(userMessage, ragConfig.getTopK(), null);
         String context = formatProducts(products);
         String systemPrompt = String.format(SYSTEM_PROMPT_TEMPLATE, context);
         List<ChatMessage> messages = buildMessages(sessionId, systemPrompt, userMessage);

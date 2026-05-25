@@ -3,6 +3,7 @@ package com.ragagent.service;
 import com.google.gson.Gson;
 import com.google.gson.JsonArray;
 import com.google.gson.JsonObject;
+import com.ragagent.config.RagConfig;
 import com.ragagent.model.Product;
 import com.ragagent.model.ProductSearchResult;
 import com.ragagent.repository.ProductRepository;
@@ -29,6 +30,7 @@ public class RetrieverService {
     private static final double IMAGE_WEIGHT = 0.3;
     private static final int RRF_K = 60;
 
+    private final RagConfig ragConfig;
     private final EmbeddingService embeddingService;
     private final ProductRepository productRepository;
 
@@ -50,7 +52,8 @@ public class RetrieverService {
     private String textCollectionId;
     private String imageCollectionId;
 
-    public RetrieverService(EmbeddingService embeddingService, ProductRepository productRepository) {
+    public RetrieverService(RagConfig ragConfig, EmbeddingService embeddingService, ProductRepository productRepository) {
+        this.ragConfig = ragConfig;
         this.embeddingService = embeddingService;
         this.productRepository = productRepository;
     }
@@ -108,7 +111,9 @@ public class RetrieverService {
 
         List<ScoredResult> results = queryCollection(getTextCollectionId(), queryVector, topK * 2, whereFilter);
 
+        double threshold = ragConfig.getSimilarityThreshold();
         return results.stream()
+                .filter(r -> r.getScore() >= threshold)
                 .sorted(Comparator.comparingDouble(ScoredResult::getScore).reversed())
                 .limit(topK)
                 .map(r -> r.productId)
@@ -131,7 +136,9 @@ public class RetrieverService {
 
         List<ScoredResult> results = queryCollection(getTextCollectionId(), queryVector, topK * 2, whereFilter);
 
+        double threshold = ragConfig.getSimilarityThreshold();
         List<ScoredResult> topResults = results.stream()
+                .filter(r -> r.getScore() >= threshold)
                 .sorted(Comparator.comparingDouble(ScoredResult::getScore).reversed())
                 .limit(topK)
                 .toList();
@@ -159,7 +166,9 @@ public class RetrieverService {
         float[] queryVector = embeddingService.embedImage(imagePath);
         List<ScoredResult> results = queryCollection(getImageCollectionId(), queryVector, topK * 2);
 
+        double threshold = ragConfig.getSimilarityThreshold();
         return results.stream()
+                .filter(r -> r.getScore() >= threshold)
                 .sorted(Comparator.comparingDouble(ScoredResult::getScore).reversed())
                 .limit(topK)
                 .map(r -> r.productId)
