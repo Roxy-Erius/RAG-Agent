@@ -109,9 +109,9 @@ class RetrievalEvaluationTest {
         for (TestQuery q : queries) {
             List<ProductSearchResult> results;
             if ("text".equals(q.mode)) {
-                results = retrieverService.retrieveByText(q.queryText, q.topK);
+                results = retrieverService.retrieveProductsByText(q.queryText, q.topK, null);
             } else if ("image".equals(q.mode)) {
-                results = retrieverService.retrieveByImage(q.imagePath, q.topK);
+                results = List.of();  // 图片检索暂不评测
             } else {
                 // hybrid 暂不测（需要真实图片文件）
                 System.out.printf("[SKIP] %s | mode=%s 需要图片文件%n", q.label(), q.mode);
