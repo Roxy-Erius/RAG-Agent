@@ -50,6 +50,14 @@ public class ChatService {
 
     private static final Pattern PRODUCT_TAG_PATTERN = Pattern.compile("\\[PRODUCT:(\\w+)]");
 
+    // 中文口语噪音词（按长度降序，优先匹配长短语）
+    private static final String[] NOISE_WORDS = {
+            "能不能", "可不可以", "帮我", "你帮", "麻烦",
+            "一下", "一些", "给我", "我想", "我要", "我需要",
+            "请问", "请", "你好", "嗯", "呢", "啊", "吧", "嘛"
+    };
+    private static final Pattern PUNCTUATION_PATTERN = Pattern.compile("[。？！，、.?!,;；\\s]+");
+
     private final RagConfig ragConfig;
     private final RetrieverService retrieverService;
     private final OpenAiStreamingChatModel streamingChatModel;
@@ -71,7 +79,10 @@ public class ChatService {
     public void chatStream(String sessionId, String userMessage, SseEmitter emitter) {
         try {
             // ① Retrieval: 检索相关商品（带完整信息 + score）
-            List<ProductSearchResult> products = retrieverService.retrieveProductsByText(userMessage, ragConfig.getTopK(), null);
+            //    先去噪音词，再多轮增强，避免口语化词汇干扰 embedding
+            String cleaned = preprocessQuery(userMessage);
+            String retrievalQuery = augmentQuery(sessionId, cleaned);
+            List<ProductSearchResult> products = retrieverService.retrieveProductsByText(retrievalQuery, ragConfig.getTopK(), null);
             log.info("检索到 {} 条商品，sessionId={}", products.size(), sessionId);
 
             // ② Augmentation: 拼装上下文
@@ -131,7 +142,9 @@ public class ChatService {
      * 非流式对话（备用）
      */
     public String chat(String sessionId, String userMessage) {
-        List<ProductSearchResult> products = retrieverService.retrieveProductsByText(userMessage, ragConfig.getTopK(), null);
+        String cleaned = preprocessQuery(userMessage);
+        String retrievalQuery = augmentQuery(sessionId, cleaned);
+        List<ProductSearchResult> products = retrieverService.retrieveProductsByText(retrievalQuery, ragConfig.getTopK(), null);
         String context = formatProducts(products);
         String systemPrompt = String.format(SYSTEM_PROMPT_TEMPLATE, context);
         List<ChatMessage> messages = buildMessages(sessionId, systemPrompt, userMessage);
@@ -182,6 +195,53 @@ public class ChatService {
             ids.add(matcher.group(1));
         }
         return ids;
+    }
+
+    /**
+     * 检索 query 预处理：去除口语噪音词和标点，让 embedding 更聚焦于核心语义。
+     *
+     * 示例：
+     *   "帮我推荐一下保湿面霜。" → "推荐保湿面霜"
+     *   "你好，请问有没有蓝牙耳机啊？" → "蓝牙耳机"
+     */
+    private String preprocessQuery(String query) {
+        String result = query;
+        // 去除首尾标点和空白
+        result = PUNCTUATION_PATTERN.matcher(result).replaceAll(" ").trim();
+        // 按长度降序逐个替换噪音词（避免短词先匹配截断长词）
+        for (String noise : NOISE_WORDS) {
+            result = result.replace(noise, " ");
+        }
+        // 合并多余空格并 trim
+        result = result.replaceAll("\\s+", " ").trim();
+        if (!result.equals(query)) {
+            log.debug("query 预处理: '{}' → '{}'", query, result);
+        }
+        return result;
+    }
+
+    /**
+     * 多轮对话 query 增强：把上一轮用户消息拼到当前 query 前面，
+     * 避免追问（如"有没有更便宜的"）因缺乏上下文导致检索为空。
+     *
+     * 示例：
+     *   history: ["推荐保湿面霜"]  current: "有没有更便宜的"
+     *   → augmented: "保湿面霜 有没有更便宜的"
+     */
+    private String augmentQuery(String sessionId, String currentQuery) {
+        List<String> recentMsgs = sessionService.getRecentUserMessages(sessionId, 1);
+        if (recentMsgs.isEmpty()) {
+            return currentQuery;
+        }
+        // 历史消息也要去噪音词，否则拼接后噪音词会污染检索 query
+        String lastUserMsg = preprocessQuery(recentMsgs.get(0));
+        // 如果当前 query 很短（追问），把上一轮消息拼上去
+        if (currentQuery.length() < 20 && lastUserMsg.length() > 2) {
+            String augmented = lastUserMsg + " " + currentQuery;
+            log.debug("query 增强: '{}' → '{}'", currentQuery, augmented);
+            return augmented;
+        }
+        return currentQuery;
     }
 
     /**
