@@ -3,6 +3,9 @@ package com.ragagent.service;
 import com.google.gson.Gson;
 import com.google.gson.JsonArray;
 import com.google.gson.JsonObject;
+import com.ragagent.model.Product;
+import com.ragagent.model.ProductSearchResult;
+import com.ragagent.repository.ProductRepository;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
@@ -14,6 +17,7 @@ import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.time.Duration;
 import java.util.*;
+import java.util.stream.Collectors;
 
 @Service
 public class RetrieverService {
@@ -26,6 +30,7 @@ public class RetrieverService {
     private static final int RRF_K = 60;
 
     private final EmbeddingService embeddingService;
+    private final ProductRepository productRepository;
 
     @Value("${chromadb.url}")
     private String chromaUrl;
@@ -45,8 +50,9 @@ public class RetrieverService {
     private String textCollectionId;
     private String imageCollectionId;
 
-    public RetrieverService(EmbeddingService embeddingService) {
+    public RetrieverService(EmbeddingService embeddingService, ProductRepository productRepository) {
         this.embeddingService = embeddingService;
+        this.productRepository = productRepository;
     }
 
     private String collectionsBase() {
@@ -106,6 +112,46 @@ public class RetrieverService {
                 .sorted(Comparator.comparingDouble(ScoredResult::getScore).reversed())
                 .limit(topK)
                 .map(r -> r.productId)
+                .toList();
+    }
+
+    /**
+     * 文本检索 + DB 联查，返回带完整商品信息的结果（供 ChatService 使用）。
+     */
+    public List<ProductSearchResult> retrieveProductsByText(String query, int topK, String category) {
+        float[] queryVector = embeddingService.embedText(query);
+
+        JsonObject whereFilter = null;
+        if (category != null && !category.isEmpty()) {
+            JsonObject categoryEq = new JsonObject();
+            categoryEq.addProperty("$eq", category);
+            whereFilter = new JsonObject();
+            whereFilter.add("category", categoryEq);
+        }
+
+        List<ScoredResult> results = queryCollection(getTextCollectionId(), queryVector, topK * 2, whereFilter);
+
+        List<ScoredResult> topResults = results.stream()
+                .sorted(Comparator.comparingDouble(ScoredResult::getScore).reversed())
+                .limit(topK)
+                .toList();
+
+        List<String> productIds = topResults.stream().map(r -> r.productId).toList();
+        List<Product> products = productRepository.findByIds(productIds);
+        Map<String, Product> productMap = products.stream()
+                .collect(Collectors.toMap(Product::getProductId, p -> p));
+
+        return topResults.stream()
+                .map(r -> {
+                    Product p = productMap.get(r.productId);
+                    if (p == null) return null;
+                    return new ProductSearchResult(
+                            p.getProductId(), r.score, p.getTitle(), p.getBrand(),
+                            p.getCategory(), p.getSubCategory(),
+                            p.getBasePrice().doubleValue(),
+                            p.getImagePath(), p.getMarketingDescription());
+                })
+                .filter(Objects::nonNull)
                 .toList();
     }
 

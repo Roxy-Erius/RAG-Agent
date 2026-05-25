@@ -17,7 +17,6 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
-import java.util.stream.Collectors;
 
 @Service
 public class ChatService {
@@ -64,8 +63,8 @@ public class ChatService {
      */
     public void chatStream(String sessionId, String userMessage, SseEmitter emitter) {
         try {
-            // ① Retrieval: 检索相关商品
-            List<ProductSearchResult> products = retrieverService.retrieveByText(userMessage, RETRIEVAL_TOP_K);
+            // ① Retrieval: 检索相关商品（带完整信息 + score）
+            List<ProductSearchResult> products = retrieverService.retrieveProductsByText(userMessage, RETRIEVAL_TOP_K, null);
             log.info("检索到 {} 条商品，sessionId={}", products.size(), sessionId);
 
             // ② Augmentation: 拼装上下文
@@ -121,7 +120,7 @@ public class ChatService {
      * 非流式对话（备用）
      */
     public String chat(String sessionId, String userMessage) {
-        List<ProductSearchResult> products = retrieverService.retrieveByText(userMessage, RETRIEVAL_TOP_K);
+        List<ProductSearchResult> products = retrieverService.retrieveProductsByText(userMessage, RETRIEVAL_TOP_K, null);
         String context = formatProducts(products);
         String systemPrompt = String.format(SYSTEM_PROMPT_TEMPLATE, context);
         List<ChatMessage> messages = buildMessages(sessionId, systemPrompt, userMessage);
