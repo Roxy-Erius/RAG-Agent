@@ -34,10 +34,10 @@ public class ChatService {
             5. 回复要简洁专业，适合移动端阅读，控制在200字以内
             6. 当用户需求模糊时，主动提问引导用户细化需求
 
-            ## 输出格式
+            ## 输出格式（重要！）
             - 正常回复使用纯文本
-            - 当推荐具体商品时，在商品描述后插入标记：[PRODUCT:id]
-              例如：这款洗面奶非常适合油皮使用 [PRODUCT:p_beauty_001]，价格也很实惠。
+            - 推荐商品时必须使用下方准确的商品ID，格式为 [PRODUCT:商品ID]
+            - 示例：这款洗面奶非常适合油皮使用 [PRODUCT:p_beauty_001]，价格也很实惠。
 
             ## 商品库
             %s
@@ -73,6 +73,11 @@ public class ChatService {
             // ③ 构建消息列表: [system, history..., user]
             List<ChatMessage> messages = buildMessages(sessionId, systemPrompt, userMessage);
 
+            // 预计算合法 Product ID 集合（供防幻觉校验）
+            Set<String> validIds = products.stream()
+                    .map(ProductSearchResult::getProductId)
+                    .collect(java.util.stream.Collectors.toSet());
+
             // ④ Generation: 调用 LLM 流式生成
             StringBuilder fullResponse = new StringBuilder();
             streamingChatModel.generate(messages, new StreamingResponseHandler<AiMessage>() {
@@ -89,8 +94,7 @@ public class ChatService {
                 @Override
                 public void onComplete(Response<AiMessage> response) {
                     try {
-                        String reply = fullResponse.toString();
-                        // 保存对话历史
+                        String reply = sanitizeProductTags(fullResponse.toString(), validIds);
                         sessionService.addUserMessage(sessionId, userMessage);
                         sessionService.addAiMessage(sessionId, reply);
                         log.info("对话完成，sessionId={}, 回复长度={}", sessionId, reply.length());
@@ -124,6 +128,10 @@ public class ChatService {
         String systemPrompt = String.format(SYSTEM_PROMPT_TEMPLATE, context);
         List<ChatMessage> messages = buildMessages(sessionId, systemPrompt, userMessage);
 
+        Set<String> validIds = products.stream()
+                .map(ProductSearchResult::getProductId)
+                .collect(java.util.stream.Collectors.toSet());
+
         StringBuilder fullResponse = new StringBuilder();
         java.util.concurrent.CompletableFuture<String> future = new java.util.concurrent.CompletableFuture<>();
 
@@ -135,9 +143,10 @@ public class ChatService {
 
             @Override
             public void onComplete(Response<AiMessage> response) {
+                String reply = sanitizeProductTags(fullResponse.toString(), validIds);
                 sessionService.addUserMessage(sessionId, userMessage);
-                sessionService.addAiMessage(sessionId, fullResponse.toString());
-                future.complete(fullResponse.toString());
+                sessionService.addAiMessage(sessionId, reply);
+                future.complete(reply);
             }
 
             @Override
@@ -167,6 +176,25 @@ public class ChatService {
         return ids;
     }
 
+    /**
+     * 防幻觉后处理：移除 LLM 编造的不存在的 [PRODUCT:id] 标签
+     */
+    private String sanitizeProductTags(String reply, Set<String> validProductIds) {
+        Matcher matcher = PRODUCT_TAG_PATTERN.matcher(reply);
+        StringBuffer sb = new StringBuffer();
+        while (matcher.find()) {
+            String id = matcher.group(1);
+            if (validProductIds.contains(id)) {
+                matcher.appendReplacement(sb, Matcher.quoteReplacement(matcher.group()));
+            } else {
+                log.warn("检测到幻觉 Product ID: {}，已从回复中移除", id);
+                matcher.appendReplacement(sb, "");
+            }
+        }
+        matcher.appendTail(sb);
+        return sb.toString();
+    }
+
     private List<ChatMessage> buildMessages(String sessionId, String systemPrompt, String userMessage) {
         List<ChatMessage> messages = new ArrayList<>();
         messages.add(SystemMessage.from(systemPrompt));
@@ -182,8 +210,9 @@ public class ChatService {
         StringBuilder sb = new StringBuilder();
         for (int i = 0; i < products.size(); i++) {
             ProductSearchResult p = products.get(i);
-            sb.append(String.format("%d. %s | %s | %s | %.0f元\n   %s\n",
+            sb.append(String.format("%d. [ID:%s] %s | %s | %s | %.0f元\n   %s\n",
                     i + 1,
+                    p.getProductId(),
                     p.getTitle(),
                     p.getBrand(),
                     p.getCategory(),
