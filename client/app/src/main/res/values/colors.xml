@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- 主色系 — 暖棕 -->
+    <color name="primary">#5C4A3A</color>
+    <color name="primary_dark">#4A3A2E</color>
+    <color name="primary_light">#8B7355</color>
+
+    <!-- 强调色 — 暖金 -->
+    <color name="accent">#C47A4A</color>
+    <color name="accent_light">#D4A574</color>
+
+    <!-- 背景 & 表面 -->
+    <color name="background">#FAF7F2</color>
+    <color name="surface">#FFFFFF</color>
+    <color name="tag_background">#F5EFE5</color>
+
+    <!-- 文字 -->
+    <color name="text_primary">#5C4A3A</color>
+    <color name="text_secondary">#A09080</color>
+    <color name="text_hint">#C4B8A8</color>
+
+    <!-- 标签 -->
+    <color name="tag_text">#B8860B</color>
+
+    <!-- 气泡 (保留旧 key 名用于兼容，值更新) -->
+    <color name="bubble_user">#5C4A3A</color>
+    <color name="bubble_ai">#FFFFFF</color>
+</resources>
