@@ -31,6 +31,21 @@ public class SessionService {
         return sessions.getOrDefault(sessionId, List.of());
     }
 
+    /**
+     * 提取最近 N 条用户消息（用于检索 query 增强）
+     */
+    public List<String> getRecentUserMessages(String sessionId, int maxCount) {
+        List<ChatMessage> history = sessions.getOrDefault(sessionId, List.of());
+        List<String> userMsgs = new ArrayList<>();
+        // 从后往前遍历，取最近的用户消息
+        for (int i = history.size() - 1; i >= 0 && userMsgs.size() < maxCount; i--) {
+            if (history.get(i) instanceof UserMessage) {
+                userMsgs.add(0, ((UserMessage) history.get(i)).singleText());
+            }
+        }
+        return userMsgs;
+    }
+
     public void clearSession(String sessionId) {
         sessions.remove(sessionId);
     }
