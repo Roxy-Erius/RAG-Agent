@@ -38,10 +38,9 @@ class SseClient {
 
         val listener = object : EventSourceListener() {
             override fun onEvent(eventSource: EventSource, id: String?, type: String?, data: String) {
-                val event = parseEvent(data)
-                trySend(event)
-                if (event is SseEvent.Done || event is SseEvent.Error) {
-                    eventSource.cancel()
+                val events = parseEvents(data)
+                events.forEach { event ->
+                    trySend(event)
                 }
             }
 
@@ -62,21 +61,31 @@ class SseClient {
     }
 
     /**
-     * 解析后端原始文本 SSE 事件。
+     * 解析后端原始文本 SSE 事件，支持 [PRODUCT:id] 标记嵌在文本中。
      * 协议格式（见 API 文档 2.1 节）：
-     *   每个 "data:" 行是一个原始文本 token
-     *   "[DONE]"           → 对话结束
-     *   "[PRODUCT:xxx]"    → 商品标记
-     *   其他文本           → AI 回复内容
+     *   "data:[DONE]"       → 对话结束
+     *   "data:[PRODUCT:xxx]"→ 商品标记（单行或内嵌）
+     *   其他文本            → AI 回复内容
      */
-    private fun parseEvent(data: String): SseEvent {
-        return when {
-            data == "[DONE]" -> SseEvent.Done
-            data.matches(Regex("^\\[PRODUCT:\\w+\\]\$")) -> {
-                val productId = data.removePrefix("[PRODUCT:").removeSuffix("]")
-                SseEvent.ProductRef(productId)
-            }
-            else -> SseEvent.Token(data)
+    private val PRODUCT_TAG_REGEX = Regex("\\[PRODUCT:(\\w+)\\]")
+
+    private fun parseEvents(data: String): List<SseEvent> {
+        if (data == "[DONE]") return listOf(SseEvent.Done)
+
+        val tags = PRODUCT_TAG_REGEX.findAll(data).toList()
+        if (tags.isEmpty()) return listOf(SseEvent.Token(data))
+
+        // 有内嵌商品标记 → 文本 + 商品引用分开推送
+        val events = mutableListOf<SseEvent>()
+        var lastEnd = 0
+        for (match in tags) {
+            val before = data.substring(lastEnd, match.range.first)
+            if (before.isNotEmpty()) events.add(SseEvent.Token(before))
+            events.add(SseEvent.ProductRef(match.groupValues[1]))
+            lastEnd = match.range.last + 1
         }
+        val after = data.substring(lastEnd)
+        if (after.isNotEmpty()) events.add(SseEvent.Token(after))
+        return events
     }
 }
