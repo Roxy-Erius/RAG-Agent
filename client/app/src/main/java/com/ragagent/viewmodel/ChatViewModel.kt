@@ -28,6 +28,9 @@ class ChatViewModel : ViewModel() {
     private val _isStreaming = MutableStateFlow(false)
     val isStreaming: StateFlow<Boolean> = _isStreaming.asStateFlow()
 
+    /** 从完整回复文本中提取 [PRODUCT:xxx] 标记 */
+    private val PRODUCT_TAG_REGEX = Regex("\\[PRODUCT:(\\w+)\\]")
+
     private var streamJob: Job? = null
 
     fun sendMessage(text: String) {
@@ -41,6 +44,7 @@ class ChatViewModel : ViewModel() {
         streamJob = viewModelScope.launch {
             var aiText = ""
             var loadingRemoved = false
+            var aiMessageAppended = false
 
             sseClient.connect(text, sessionId).collect { event ->
                 when (event) {
@@ -48,6 +52,11 @@ class ChatViewModel : ViewModel() {
                         if (!loadingRemoved) {
                             removeLoading()
                             loadingRemoved = true
+                        }
+                        if (!aiMessageAppended) {
+                            // 新消息首 token → 追加新 Ai 条目，而非覆盖上一条
+                            append(ChatMessage.Ai(""))
+                            aiMessageAppended = true
                         }
                         aiText += event.content
                         updateLastAiMessage(aiText)
@@ -69,6 +78,16 @@ class ChatViewModel : ViewModel() {
                         if (!loadingRemoved) {
                             removeLoading()
                             loadingRemoved = true
+                        }
+                        // 从完整回复中提取 [PRODUCT:id] 标记（后端 token 化拆散了标记）
+                        val productIds = PRODUCT_TAG_REGEX.findAll(aiText)
+                            .map { it.groupValues[1] }
+                            .toList()
+                        if (productIds.isNotEmpty()) {
+                            // 去掉文字中的 [PRODUCT:xxx] 标记
+                            updateLastAiMessage(aiText.replace(PRODUCT_TAG_REGEX, ""))
+                            // 拉取商品并插入卡片
+                            productIds.forEach { fetchAndInsertProductCard(it) }
                         }
                         _isStreaming.value = false
                     }
@@ -113,6 +132,8 @@ class ChatViewModel : ViewModel() {
             val product = apiService.getProduct(productId)
             if (product != null) {
                 append(ChatMessage.ProductCard(product))
+            } else {
+                append(ChatMessage.Ai("[DEBUG] 商品 $productId 未查到"))
             }
         }
     }
