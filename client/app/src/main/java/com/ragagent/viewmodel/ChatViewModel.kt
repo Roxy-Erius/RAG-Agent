@@ -63,12 +63,7 @@ class ChatViewModel : ViewModel() {
                             removeLoading()
                             loadingRemoved = true
                         }
-                        // 确保当前 AI 文本已加入列表
-                        if (aiText.isNotBlank()) {
-                            finalizeLastAiMessage()
-                            aiText = ""
-                        }
-                        // 获取商品信息并插入卡片
+                        // 插入商品卡片（卡片后的文字继续追加到当前 Ai 消息）
                         fetchAndInsertProductCard(event.productId)
                     }
                     is SseEvent.Done -> {
@@ -108,10 +103,6 @@ class ChatViewModel : ViewModel() {
             list.add(ChatMessage.Ai(text))
         }
         _messages.value = list
-    }
-
-    private fun finalizeLastAiMessage() {
-        // 标记最后一个 AI 消息为完成状态（当前实现中已是不可变的）
     }
 
     private fun fetchAndInsertProductCard(productId: String) {
