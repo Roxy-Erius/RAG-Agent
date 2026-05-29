@@ -338,8 +338,9 @@ public class ChatService {
         int bracketIdx = rest.lastIndexOf('[');
         if (bracketIdx >= 0) {
             String possibleTag = rest.substring(bracketIdx);
-            if (possibleTag.length() < 15  // 未闭合 ] → 可能是不完整标签
-                    && ("[DONE".startsWith(possibleTag) || "[PRODUCT:".startsWith(possibleTag))) {
+            if ("[DONE".startsWith(possibleTag)
+                    || "[PRODUCT:".startsWith(possibleTag)
+                    || possibleTag.matches("^\\[PRODUCT:\\w*$")) {
                 emitTokens(emitter, rest.substring(0, bracketIdx));
                 sseBuffer.setLength(0);
                 sseBuffer.append(possibleTag);
