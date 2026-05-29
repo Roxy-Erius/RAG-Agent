@@ -353,12 +353,11 @@ public class ChatService {
         sseBuffer.setLength(0);
     }
 
-    /** 逐字符发送 token 事件，保持打字机效果 */
+    /** 发送文本 token 事件 */
     private void emitTokens(SseEmitter emitter, String text) throws java.io.IOException {
-        for (char c : text.toCharArray()) {
-            emitter.send(SseEmitter.event().data(
-                    "{\"type\":\"token\",\"content\":\"" + escapeJson(String.valueOf(c)) + "\"}"));
-        }
+        if (text.isEmpty()) return;
+        emitter.send(SseEmitter.event().data(
+                "{\"type\":\"token\",\"content\":\"" + escapeJson(text) + "\"}"));
     }
 
     private String escapeJson(String s) {
