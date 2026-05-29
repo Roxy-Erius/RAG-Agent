@@ -50,6 +50,9 @@ public class ChatService {
 
     private static final Pattern PRODUCT_TAG_PATTERN = Pattern.compile("\\[PRODUCT:(\\w+)]");
 
+    // SSE 缓冲：累积 LLM token，检测完整 [PRODUCT:id] 后才分类发送
+    private final StringBuilder sseBuffer = new StringBuilder();
+
     // 中文口语噪音词（按长度降序，优先匹配长短语）
     private static final String[] NOISE_WORDS = {
             "能不能", "可不可以", "帮我", "你帮", "麻烦",
@@ -104,7 +107,8 @@ public class ChatService {
                 public void onNext(String token) {
                     try {
                         fullResponse.append(token);
-                        emitter.send(SseEmitter.event().data(token));
+                        sseBuffer.append(token);
+                        flushSseBuffer(emitter);
                     } catch (Exception e) {
                         log.warn("SSE 发送失败: {}", e.getMessage());
                     }
@@ -113,11 +117,15 @@ public class ChatService {
                 @Override
                 public void onComplete(Response<AiMessage> response) {
                     try {
+                        // 刷出缓冲区剩余文本
+                        emitTokens(emitter, sseBuffer.toString());
+                        sseBuffer.setLength(0);
+
                         String reply = sanitizeProductTags(fullResponse.toString(), validIds);
                         sessionService.addUserMessage(sessionId, userMessage);
                         sessionService.addAiMessage(sessionId, reply);
                         log.info("对话完成，sessionId={}, 回复长度={}", sessionId, reply.length());
-                        emitter.send(SseEmitter.event().data("[DONE]"));
+                        emitter.send(SseEmitter.event().data("{\"type\":\"done\"}"));
                         emitter.complete();
                     } catch (Exception e) {
                         log.error("完成回调异常: {}", e.getMessage());
@@ -293,5 +301,70 @@ public class ChatService {
     private String truncate(String text, int maxLen) {
         if (text == null) return "";
         return text.length() > maxLen ? text.substring(0, maxLen) + "..." : text;
+    }
+
+    // ========== SSE 缓冲发送（技术路线 2.5 节：结构化 JSON） ==========
+
+    /**
+     * 从缓冲区中检测完整的 [PRODUCT:id] 标签，分类发送 token/product 事件。
+     * 未完成的标签（如 "[PRO"）保留在缓冲区等待后续 token 拼接。
+     */
+    private void flushSseBuffer(SseEmitter emitter) throws java.io.IOException {
+        String buf = sseBuffer.toString();
+
+        // ① 查找完整的 [PRODUCT:id] 标签
+        Matcher m = PRODUCT_TAG_PATTERN.matcher(buf);
+        int lastEnd = 0;
+        while (m.find()) {
+            String before = buf.substring(lastEnd, m.start());
+            emitTokens(emitter, before);
+            emitter.send(SseEmitter.event().data(
+                    "{\"type\":\"product\",\"productId\":\"" + m.group(1) + "\"}"));
+            lastEnd = m.end();
+        }
+
+        String rest = buf.substring(lastEnd);
+
+        // ② 检查 [DONE]
+        int doneIdx = rest.indexOf("[DONE]");
+        if (doneIdx >= 0) {
+            emitTokens(emitter, rest.substring(0, doneIdx));
+            emitter.send(SseEmitter.event().data("{\"type\":\"done\"}"));
+            sseBuffer.setLength(0);
+            return;
+        }
+
+        // ③ 保留末尾可能为不完整标签的部分（以 '[' 开头的前缀）
+        int bracketIdx = rest.lastIndexOf('[');
+        if (bracketIdx >= 0) {
+            String possibleTag = rest.substring(bracketIdx);
+            if (possibleTag.length() < 15  // 未闭合 ] → 可能是不完整标签
+                    && ("[DONE".startsWith(possibleTag) || "[PRODUCT:".startsWith(possibleTag))) {
+                emitTokens(emitter, rest.substring(0, bracketIdx));
+                sseBuffer.setLength(0);
+                sseBuffer.append(possibleTag);
+                return;
+            }
+        }
+
+        // ④ 无风险 → 全量发送
+        emitTokens(emitter, rest);
+        sseBuffer.setLength(0);
+    }
+
+    /** 逐字符发送 token 事件，保持打字机效果 */
+    private void emitTokens(SseEmitter emitter, String text) throws java.io.IOException {
+        for (char c : text.toCharArray()) {
+            emitter.send(SseEmitter.event().data(
+                    "{\"type\":\"token\",\"content\":\"" + escapeJson(String.valueOf(c)) + "\"}"));
+        }
+    }
+
+    private String escapeJson(String s) {
+        return s.replace("\\", "\\\\")
+                .replace("\"", "\\\"")
+                .replace("\n", "\\n")
+                .replace("\r", "\\r")
+                .replace("\t", "\\t");
     }
 }
