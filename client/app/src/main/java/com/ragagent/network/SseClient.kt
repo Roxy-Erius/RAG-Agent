@@ -4,8 +4,10 @@ import com.google.gson.Gson
 import com.ragagent.BuildConfig
 import com.ragagent.model.SseEvent
 import com.ragagent.model.SseEventDto
+import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.channels.awaitClose
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.buffer
 import kotlinx.coroutines.flow.callbackFlow
 import okhttp3.OkHttpClient
 import okhttp3.Request
@@ -57,7 +59,7 @@ class SseClient {
         val eventSource = factory.newEventSource(request, listener)
 
         awaitClose { eventSource.cancel() }
-    }
+    }.buffer(Channel.UNLIMITED)
 
     /** 解析后端结构化 JSON：{"type":"token","content":"..."} / {"type":"product","productId":"..."} / {"type":"done"} */
     private fun parseEvent(data: String): SseEvent {
