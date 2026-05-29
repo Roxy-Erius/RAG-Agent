@@ -86,8 +86,8 @@ class ChatViewModel : ViewModel() {
                         if (productIds.isNotEmpty()) {
                             // 去掉文字中的 [PRODUCT:xxx] 标记
                             updateLastAiMessage(aiText.replace(PRODUCT_TAG_REGEX, ""))
-                            // 拉取商品并插入卡片
-                            productIds.forEach { fetchAndInsertProductCard(it) }
+                            // 批量拉取商品并插入卡片
+                            fetchAndInsertProductCards(productIds)
                         }
                         _isStreaming.value = false
                     }
@@ -132,9 +132,15 @@ class ChatViewModel : ViewModel() {
             val product = apiService.getProduct(productId)
             if (product != null) {
                 append(ChatMessage.ProductCard(product))
-            } else {
-                append(ChatMessage.Ai("[DEBUG] 商品 $productId 未查到"))
             }
+        }
+    }
+
+    /** 批量拉取多个商品并插入卡片（一次 API 调用，避免逐个查询的延迟） */
+    private fun fetchAndInsertProductCards(productIds: List<String>) {
+        viewModelScope.launch {
+            val products = apiService.getProductsBatch(productIds)
+            products.forEach { append(ChatMessage.ProductCard(it)) }
         }
     }
 
