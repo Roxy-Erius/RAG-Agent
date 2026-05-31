@@ -42,4 +42,24 @@ public class CartService {
         log.info("购物车迁移 | sessionId={} → userId={}", sessionId, userId);
         cartRepository.migrateSessionToUser(sessionId, userId);
     }
+
+    public CartItem addToCart(String sessionId, Long userId, String productId, int quantity) {
+        log.info("加购(user) | userId={} | productId={} | quantity={}", userId, productId, quantity);
+        return cartRepository.add(sessionId, userId, productId, quantity);
+    }
+
+    public boolean removeFromCart(Long id, Long userId) {
+        log.info("删除购物车项(user) | id={} | userId={}", id, userId);
+        return cartRepository.removeByUser(id, userId);
+    }
+
+    public CartItem updateQuantity(Long id, Long userId, int quantity) {
+        log.info("修改数量(user) | id={} | userId={} | quantity={}", id, userId, quantity);
+        return cartRepository.updateQuantityByUser(id, userId, quantity);
+    }
+
+    public List<CartItem> getCartByUser(Long userId) {
+        log.debug("查询购物车(user) | userId={}", userId);
+        return cartRepository.findByUserId(userId);
+    }
 }

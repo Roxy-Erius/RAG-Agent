@@ -100,6 +100,61 @@ public class CartRepository {
                 ROW_MAPPER, sessionId);
     }
 
+    public CartItem add(String sessionId, Long userId, String productId, int quantity) {
+        List<CartItem> existing = jdbc.query(
+                "SELECT * FROM cart_items WHERE user_id = ? AND product_id = ?",
+                PLAIN_MAPPER, userId, productId);
+        if (!existing.isEmpty()) {
+            CartItem item = existing.get(0);
+            jdbc.update("UPDATE cart_items SET quantity = quantity + ? WHERE id = ?",
+                    quantity, item.getId());
+            item.setQuantity(item.getQuantity() + quantity);
+            return item;
+        }
+        KeyHolder keyHolder = new GeneratedKeyHolder();
+        jdbc.update(con -> {
+            PreparedStatement ps = con.prepareStatement(
+                    "INSERT INTO cart_items (session_id, user_id, product_id, quantity) VALUES (?, ?, ?, ?)",
+                    Statement.RETURN_GENERATED_KEYS);
+            ps.setString(1, sessionId);
+            ps.setLong(2, userId);
+            ps.setString(3, productId);
+            ps.setInt(4, quantity);
+            return ps;
+        }, keyHolder);
+        CartItem item = new CartItem();
+        item.setId(keyHolder.getKey().longValue());
+        item.setSessionId(sessionId);
+        item.setProductId(productId);
+        item.setQuantity(quantity);
+        return item;
+    }
+
+    public boolean removeByUser(Long id, Long userId) {
+        return jdbc.update("DELETE FROM cart_items WHERE id = ? AND user_id = ?",
+                id, userId) > 0;
+    }
+
+    public CartItem updateQuantityByUser(Long id, Long userId, int quantity) {
+        if (quantity <= 0) {
+            removeByUser(id, userId);
+            return null;
+        }
+        jdbc.update("UPDATE cart_items SET quantity = ? WHERE id = ? AND user_id = ?",
+                quantity, id, userId);
+        List<CartItem> items = jdbc.query(
+                "SELECT * FROM cart_items WHERE id = ?", PLAIN_MAPPER, id);
+        return items.isEmpty() ? null : items.get(0);
+    }
+
+    public List<CartItem> findByUserId(Long userId) {
+        return jdbc.query(
+                "SELECT c.*, p.title, p.brand, p.base_price, p.image_path " +
+                "FROM cart_items c LEFT JOIN products p ON c.product_id = p.product_id " +
+                "WHERE c.user_id = ? ORDER BY c.created_at DESC",
+                ROW_MAPPER, userId);
+    }
+
     public void migrateSessionToUser(String sessionId, Long userId) {
         jdbc.update("UPDATE cart_items SET user_id = ? WHERE session_id = ? AND user_id IS NULL",
                 userId, sessionId);
