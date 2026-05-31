@@ -134,6 +134,13 @@ class ChatViewModel : ViewModel() {
         }
     }
 
+    fun refreshCartCount() {
+        viewModelScope.launch {
+            val items = apiService.getCart(sessionId)
+            _cartCount.value = items.size
+        }
+    }
+
     fun clearSession() {
         streamJob?.cancel()
         _messages.value = emptyList()

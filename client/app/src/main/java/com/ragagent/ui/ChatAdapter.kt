@@ -132,9 +132,21 @@ class ChatAdapter(
 
             binding.tvAddToCart.setOnClickListener {
                 if (!added) {
-                    addedProductIds.add(product.productId)
-                    onAddToCart(product)
-                    bind(product)  // 刷新按钮状态
+                    if (!com.ragagent.auth.AuthManager.isLoggedIn()) {
+                        androidx.appcompat.app.AlertDialog.Builder(binding.root.context)
+                            .setTitle("请先登录")
+                            .setMessage("登录后即可使用购物车功能")
+                            .setPositiveButton("去登录") { _, _ ->
+                                binding.root.context.startActivity(
+                                    android.content.Intent(binding.root.context, LoginActivity::class.java))
+                            }
+                            .setNegativeButton("取消", null)
+                            .show()
+                    } else {
+                        addedProductIds.add(product.productId)
+                        onAddToCart(product)
+                        bind(product)
+                    }
                 }
             }
         }
