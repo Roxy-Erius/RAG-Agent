@@ -66,5 +66,19 @@ class MainActivity : AppCompatActivity() {
                 viewModel.sendMessage(text)
             }
         }
+
+        // 购物车角标
+        lifecycleScope.launch {
+            viewModel.cartCount.collect { count ->
+                binding.tvCartBadge.text = count.toString()
+                binding.tvCartBadge.visibility = if (count > 0) View.VISIBLE else View.GONE
+            }
+        }
+
+        binding.btnCart.setOnClickListener {
+            startActivity(Intent(this, CartActivity::class.java).apply {
+                putExtra("sessionId", viewModel.sessionId)
+            })
+        }
     }
 }
