@@ -3,6 +3,7 @@ package com.ragagent.ui
 import android.content.Intent
 import android.os.Bundle
 import android.view.View
+import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
 import androidx.lifecycle.lifecycleScope
 import androidx.recyclerview.widget.LinearLayoutManager
@@ -24,12 +25,18 @@ class MainActivity : AppCompatActivity() {
 
         viewModel = ChatViewModel()
 
-        adapter = ChatAdapter { product ->
-            val intent = Intent(this, ProductCardActivity::class.java).apply {
-                putExtra(ProductCardActivity.EXTRA_PRODUCT_ID, product.productId)
+        adapter = ChatAdapter(
+            onProductClick = { product ->
+                val intent = Intent(this, ProductCardActivity::class.java).apply {
+                    putExtra(ProductCardActivity.EXTRA_PRODUCT_ID, product.productId)
+                }
+                startActivity(intent)
+            },
+            onAddToCart = { product ->
+                viewModel.addToCart(product.productId)
+                Toast.makeText(this, "✅ 已加入购物车", Toast.LENGTH_SHORT).show()
             }
-            startActivity(intent)
-        }
+        )
 
         binding.recyclerView.layoutManager = LinearLayoutManager(this)
         binding.recyclerView.adapter = adapter

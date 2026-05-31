@@ -13,7 +13,8 @@ import com.ragagent.model.ChatMessage
 import com.ragagent.model.Product
 
 class ChatAdapter(
-    private val onProductClick: (Product) -> Unit
+    private val onProductClick: (Product) -> Unit,
+    private val onAddToCart: (Product) -> Unit
 ) : ListAdapter<ChatMessage, RecyclerView.ViewHolder>(DiffCallback) {
 
     companion object {
@@ -51,7 +52,7 @@ class ChatAdapter(
             }
             VIEW_TYPE_PRODUCT -> {
                 val binding = ItemProductCardBinding.inflate(inflater, parent, false)
-                ProductViewHolder(binding, onProductClick)
+                ProductViewHolder(binding, onProductClick, onAddToCart)
             }
             VIEW_TYPE_LOADING -> {
                 val binding = ItemMessageAiBinding.inflate(inflater, parent, false)
@@ -93,7 +94,8 @@ class ChatAdapter(
 
     class ProductViewHolder(
         private val binding: ItemProductCardBinding,
-        private val onProductClick: (Product) -> Unit
+        private val onProductClick: (Product) -> Unit,
+        private val onAddToCart: (Product) -> Unit
     ) : RecyclerView.ViewHolder(binding.root) {
 
         private var currentProduct: Product? = null
@@ -116,6 +118,10 @@ class ChatAdapter(
                     .load(product.imagePath)
                     .placeholder(R.drawable.bg_product_placeholder)
                     .into(binding.ivProductImage)
+            }
+
+            binding.tvAddToCart.setOnClickListener {
+                onAddToCart(product)
             }
         }
     }
