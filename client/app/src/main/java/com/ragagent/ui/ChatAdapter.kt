@@ -17,6 +17,8 @@ class ChatAdapter(
     private val onAddToCart: (Product) -> Unit
 ) : ListAdapter<ChatMessage, RecyclerView.ViewHolder>(DiffCallback) {
 
+    private val addedProductIds = mutableSetOf<String>()
+
     companion object {
         private const val VIEW_TYPE_USER = 0
         private const val VIEW_TYPE_AI = 1
@@ -92,7 +94,7 @@ class ChatAdapter(
         }
     }
 
-    class ProductViewHolder(
+    inner class ProductViewHolder(
         private val binding: ItemProductCardBinding,
         private val onProductClick: (Product) -> Unit,
         private val onAddToCart: (Product) -> Unit
@@ -112,16 +114,28 @@ class ChatAdapter(
             binding.tvProductPrice.text = "¥${product.basePrice}"
             binding.tvProductBrand.text = product.brand
 
-            // Glide 加载图片
-            if (!product.imagePath.isNullOrBlank()) {
-                com.bumptech.glide.Glide.with(binding.root.context)
-                    .load(product.imagePath)
-                    .placeholder(R.drawable.bg_product_placeholder)
-                    .into(binding.ivProductImage)
+            // 加购按钮状态
+            val added = addedProductIds.contains(product.productId)
+            if (added) {
+                binding.tvAddToCart.text = "✓ 已添加"
+                binding.tvAddToCart.setBackgroundColor(
+                    binding.root.context.getColor(android.R.color.transparent))
+                binding.tvAddToCart.setTextColor(
+                    binding.root.context.getColor(R.color.accent))
+            } else {
+                binding.tvAddToCart.text = "加入购物车"
+                binding.tvAddToCart.background =
+                    binding.root.context.getDrawable(R.drawable.bg_tag)
+                binding.tvAddToCart.setTextColor(
+                    binding.root.context.getColor(R.color.text_primary))
             }
 
             binding.tvAddToCart.setOnClickListener {
-                onAddToCart(product)
+                if (!added) {
+                    addedProductIds.add(product.productId)
+                    onAddToCart(product)
+                    bind(product)  // 刷新按钮状态
+                }
             }
         }
     }
