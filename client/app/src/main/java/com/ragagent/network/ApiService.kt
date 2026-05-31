@@ -93,4 +93,70 @@ class ApiService {
             false
         }
     }
+
+    // ========== 购物车 API ==========
+
+    data class CartItemDto(
+        val id: Long,
+        val sessionId: String,
+        val productId: String,
+        val quantity: Int,
+        val productTitle: String?,
+        val productBrand: String?,
+        val productPrice: Double?,
+        val productImagePath: String?
+    )
+
+    suspend fun addToCart(sessionId: String, productId: String, quantity: Int = 1): CartItemDto? =
+        withContext(Dispatchers.IO) {
+            try {
+                val request = Request.Builder()
+                    .url("$baseUrl/api/cart/add?sessionId=$sessionId&productId=$productId&quantity=$quantity")
+                    .post(okhttp3.RequestBody.create(null, ByteArray(0)))
+                    .build()
+                val response = client.newCall(request).execute()
+                if (response.isSuccessful) {
+                    response.body?.string()?.let { gson.fromJson(it, CartItemDto::class.java) }
+                } else null
+            } catch (e: Exception) { null }
+        }
+
+    suspend fun removeFromCart(id: Long, sessionId: String): Boolean = withContext(Dispatchers.IO) {
+        try {
+            val request = Request.Builder()
+                .url("$baseUrl/api/cart/$id?sessionId=$sessionId")
+                .delete()
+                .build()
+            client.newCall(request).execute().isSuccessful
+        } catch (e: Exception) { false }
+    }
+
+    suspend fun updateCartQuantity(id: Long, sessionId: String, quantity: Int): CartItemDto? =
+        withContext(Dispatchers.IO) {
+            try {
+                val request = Request.Builder()
+                    .url("$baseUrl/api/cart/$id?sessionId=$sessionId&quantity=$quantity")
+                    .put(okhttp3.RequestBody.create(null, ByteArray(0)))
+                    .build()
+                val response = client.newCall(request).execute()
+                if (response.isSuccessful) {
+                    response.body?.string()?.let { gson.fromJson(it, CartItemDto::class.java) }
+                } else null
+            } catch (e: Exception) { null }
+        }
+
+    suspend fun getCart(sessionId: String): List<CartItemDto> = withContext(Dispatchers.IO) {
+        try {
+            val request = Request.Builder()
+                .url("$baseUrl/api/cart?sessionId=$sessionId")
+                .build()
+            val response = client.newCall(request).execute()
+            if (response.isSuccessful) {
+                val json = response.body?.string() ?: "[]"
+                val type = com.google.gson.reflect.TypeToken.getParameterized(
+                    List::class.java, CartItemDto::class.java).type
+                gson.fromJson(json, type)
+            } else emptyList()
+        } catch (e: Exception) { emptyList() }
+    }
 }
