@@ -28,7 +28,19 @@ class ChatViewModel : ViewModel() {
     private val _isStreaming = MutableStateFlow(false)
     val isStreaming: StateFlow<Boolean> = _isStreaming.asStateFlow()
 
+    private val _cartCount = MutableStateFlow(0)
+    val cartCount: StateFlow<Int> = _cartCount.asStateFlow()
+
     private var streamJob: Job? = null
+
+    fun addToCart(productId: String) {
+        viewModelScope.launch {
+            val item = apiService.addToCart(sessionId, productId)
+            if (item != null) {
+                _cartCount.value = _cartCount.value + 1
+            }
+        }
+    }
 
     fun sendMessage(text: String) {
         if (text.isBlank() || _isStreaming.value) return
