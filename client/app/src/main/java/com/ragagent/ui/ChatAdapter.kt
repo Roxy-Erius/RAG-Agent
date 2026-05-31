@@ -117,7 +117,7 @@ class ChatAdapter(
             // 加购按钮状态
             val added = addedProductIds.contains(product.productId)
             if (added) {
-                binding.tvAddToCart.text = "✓ 已添加"
+                binding.tvAddToCart.text = "✓ 已加入购物车"
                 binding.tvAddToCart.setBackgroundColor(
                     binding.root.context.getColor(android.R.color.transparent))
                 binding.tvAddToCart.setTextColor(
