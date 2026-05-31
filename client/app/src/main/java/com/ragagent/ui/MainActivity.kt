@@ -18,6 +18,10 @@ class MainActivity : AppCompatActivity() {
     private lateinit var viewModel: ChatViewModel
     private lateinit var adapter: ChatAdapter
 
+    companion object {
+        private const val REQUEST_HISTORY = 1001
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         binding = ActivityMainBinding.inflate(layoutInflater)
@@ -79,6 +83,39 @@ class MainActivity : AppCompatActivity() {
             startActivity(Intent(this, CartActivity::class.java).apply {
                 putExtra("sessionId", viewModel.sessionId)
             })
+        }
+
+        // 历史会话按钮
+        binding.btnHistory.setOnClickListener {
+            if (!com.ragagent.auth.AuthManager.isLoggedIn()) {
+                androidx.appcompat.app.AlertDialog.Builder(this)
+                    .setTitle("请先登录")
+                    .setMessage("登录后可查看历史会话")
+                    .setPositiveButton("去登录") { _, _ ->
+                        startActivity(Intent(this, LoginActivity::class.java))
+                    }
+                    .setNegativeButton("取消", null)
+                    .show()
+            } else {
+                startActivityForResult(
+                    Intent(this, HistoryActivity::class.java), REQUEST_HISTORY)
+            }
+        }
+    }
+
+    override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
+        super.onActivityResult(requestCode, resultCode, data)
+        if (requestCode == REQUEST_HISTORY && resultCode == RESULT_OK) {
+            val conversationId = data?.getStringExtra("conversationId")
+            val title = data?.getStringExtra("title")
+            if (!conversationId.isNullOrBlank()) {
+                viewModel.loadConversation(conversationId, title)
+                Toast.makeText(this, "已加载: ${title ?: "历史会话"}", Toast.LENGTH_SHORT).show()
+            } else {
+                // 新建对话
+                viewModel.startNewChat()
+                Toast.makeText(this, "已创建新对话", Toast.LENGTH_SHORT).show()
+            }
         }
     }
 

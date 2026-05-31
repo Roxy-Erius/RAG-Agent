@@ -1,6 +1,7 @@
 package com.ragagent.service;
 
 import com.ragagent.config.RagConfig;
+import com.ragagent.model.Conversation;
 import com.ragagent.model.ProductSearchResult;
 import dev.langchain4j.data.message.AiMessage;
 import dev.langchain4j.data.message.ChatMessage;
@@ -78,21 +79,27 @@ public class ChatService {
     private final RetrieverService retrieverService;
     private final OpenAiStreamingChatModel streamingChatModel;
     private final SessionService sessionService;
+    private final ConversationService conversationService;
 
     public ChatService(RagConfig ragConfig,
                        RetrieverService retrieverService,
                        OpenAiStreamingChatModel streamingChatModel,
-                       SessionService sessionService) {
+                       SessionService sessionService,
+                       ConversationService conversationService) {
         this.ragConfig = ragConfig;
         this.retrieverService = retrieverService;
         this.streamingChatModel = streamingChatModel;
         this.sessionService = sessionService;
+        this.conversationService = conversationService;
     }
 
     /**
      * RAG 流式对话核心方法
+     * @param userId 登录用户ID，null 表示匿名用户
+     * @param conversationId 会话ID（UUID），null 则自动生成
      */
-    public void chatStream(String sessionId, String userMessage, SseEmitter emitter) {
+    public void chatStream(String sessionId, String conversationId, Long userId,
+                           String userMessage, SseEmitter emitter) {
         try {
             // ① Retrieval: 检索相关商品（带完整信息 + score）
             //    先去噪音词，再多轮增强，避免口语化词汇干扰 embedding
@@ -143,10 +150,24 @@ public class ChatService {
                         String reply = sanitizeProductTags(fullResponse.toString(), validIds);
                         sessionService.addUserMessage(sessionId, userMessage);
                         sessionService.addAiMessage(sessionId, reply);
+
+                        // 持久化到 MySQL（仅登录用户）
+                        String effectiveCid = conversationId;
+                        if (userId != null) {
+                            java.util.List<String> productIds = extractProductIds(reply);
+                            Conversation conv = conversationService.getOrCreate(userId, conversationId, userMessage);
+                            effectiveCid = conv.getConversationId();
+                            conversationService.saveMessage(conv.getId(), "user", userMessage, null);
+                            conversationService.saveMessage(conv.getId(), "ai", reply, productIds);
+                            log.debug("持久化消息 | conversationId={} | role=user,ai", effectiveCid);
+                        }
+
                         long elapsed = System.currentTimeMillis() - startTime;
-                        log.info("└─ 对话完成 | sessionId={} | 回复长度={} | 耗时={}ms",
-                                sessionId, reply.length(), elapsed);
-                        emitter.send(SseEmitter.event().data("{\"type\":\"done\"}"));
+                        log.info("└─ 对话完成 | sessionId={} | conversationId={} | 回复长度={} | 耗时={}ms",
+                                sessionId, effectiveCid, reply.length(), elapsed);
+                        emitter.send(SseEmitter.event().data(
+                                "{\"type\":\"done\",\"conversationId\":\"" +
+                                (effectiveCid != null ? effectiveCid : "") + "\"}"));
                         emitter.complete();
                     } catch (Exception e) {
                         log.error("完成回调异常: {}", e.getMessage());
@@ -170,7 +191,7 @@ public class ChatService {
     /**
      * 非流式对话（备用）
      */
-    public String chat(String sessionId, String userMessage) {
+    public String chat(String sessionId, String conversationId, Long userId, String userMessage) {
         String cleaned = preprocessQuery(userMessage);
         String retrievalQuery = augmentQuery(sessionId, cleaned);
         List<ProductSearchResult> products = retrieverService.retrieveProductsByText(retrievalQuery, ragConfig.getTopK(), null);
@@ -196,6 +217,15 @@ public class ChatService {
                 String reply = sanitizeProductTags(fullResponse.toString(), validIds);
                 sessionService.addUserMessage(sessionId, userMessage);
                 sessionService.addAiMessage(sessionId, reply);
+
+                // 持久化到 MySQL（仅登录用户）
+                if (userId != null) {
+                    java.util.List<String> productIds = extractProductIds(reply);
+                    Conversation conv = conversationService.getOrCreate(userId, conversationId, userMessage);
+                    conversationService.saveMessage(conv.getId(), "user", userMessage, null);
+                    conversationService.saveMessage(conv.getId(), "ai", reply, productIds);
+                }
+
                 future.complete(reply);
             }
 

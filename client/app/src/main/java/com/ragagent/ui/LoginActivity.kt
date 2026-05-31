@@ -36,6 +36,7 @@ class LoginActivity : AppCompatActivity() {
                     val sessionId = intent.getStringExtra("sessionId") ?: "default"
                     apiService.linkSession(sessionId)
                     Toast.makeText(this@LoginActivity, "登录成功", Toast.LENGTH_SHORT).show()
+                    setResult(RESULT_OK)
                     finish()
                 } else {
                     binding.tvError.text = "用户名或密码错误"

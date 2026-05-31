@@ -30,10 +30,21 @@ class SseClient {
         .connectTimeout(30, TimeUnit.SECONDS)
         .readTimeout(10, TimeUnit.MINUTES)
         .writeTimeout(30, TimeUnit.SECONDS)
+        .addInterceptor { chain ->
+            val original = chain.request()
+            val token = com.ragagent.auth.AuthManager.getToken()
+            val request = if (token != null) {
+                original.newBuilder()
+                    .header("Authorization", "Bearer $token")
+                    .build()
+            } else original
+            chain.proceed(request)
+        }
         .build()
 
-    fun connect(message: String, sessionId: String): Flow<SseEvent> = callbackFlow {
-        val url = "$baseUrl/api/chat/stream?message=${java.net.URLEncoder.encode(message, "UTF-8")}&sessionId=$sessionId"
+    fun connect(message: String, sessionId: String, conversationId: String? = null): Flow<SseEvent> = callbackFlow {
+        val cidParam = if (!conversationId.isNullOrBlank()) "&conversationId=$conversationId" else ""
+        val url = "$baseUrl/api/chat/stream?message=${java.net.URLEncoder.encode(message, "UTF-8")}&sessionId=$sessionId$cidParam"
         val request = Request.Builder()
             .url(url)
             .header("Accept", "text/event-stream")

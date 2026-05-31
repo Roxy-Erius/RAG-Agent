@@ -22,6 +22,9 @@ class ChatViewModel : ViewModel() {
     /** 当前会话 ID，同一会话内保持上下文 */
     val sessionId: String = UUID.randomUUID().toString().take(8)
 
+    /** 当前 DB 会话 ID（登录用户），null 表示匿名或新会话 */
+    private var conversationId: String? = null
+
     private val _messages = MutableStateFlow<List<ChatMessage>>(emptyList())
     val messages: StateFlow<List<ChatMessage>> = _messages.asStateFlow()
 
@@ -30,6 +33,9 @@ class ChatViewModel : ViewModel() {
 
     private val _cartCount = MutableStateFlow(0)
     val cartCount: StateFlow<Int> = _cartCount.asStateFlow()
+
+    private val _conversationTitle = MutableStateFlow<String?>(null)
+    val conversationTitle: StateFlow<String?> = _conversationTitle.asStateFlow()
 
     private var streamJob: Job? = null
 
@@ -55,7 +61,7 @@ class ChatViewModel : ViewModel() {
             var loadingRemoved = false
             var aiMessageAppended = false
 
-            sseClient.connect(text, sessionId).collect { event ->
+            sseClient.connect(text, sessionId, conversationId).collect { event ->
                 when (event) {
                     is SseEvent.Token -> {
                         if (!loadingRemoved) {
@@ -63,7 +69,6 @@ class ChatViewModel : ViewModel() {
                             loadingRemoved = true
                         }
                         if (!aiMessageAppended) {
-                            // 新消息首 token → 追加新 Ai 条目，而非覆盖上一条
                             append(ChatMessage.Ai(""))
                             aiMessageAppended = true
                         }
@@ -75,13 +80,16 @@ class ChatViewModel : ViewModel() {
                             removeLoading()
                             loadingRemoved = true
                         }
-                        // 插入商品卡片（卡片后的文字继续追加到当前 Ai 消息）
                         fetchAndInsertProductCard(event.productId)
                     }
                     is SseEvent.Done -> {
                         if (!loadingRemoved) {
                             removeLoading()
                             loadingRemoved = true
+                        }
+                        // 捕获后端返回的 conversationId（登录用户首条消息后）
+                        if (event.conversationId.isNotBlank() && conversationId == null) {
+                            conversationId = event.conversationId
                         }
                         _isStreaming.value = false
                     }
@@ -97,6 +105,95 @@ class ChatViewModel : ViewModel() {
             }
         }
     }
+
+    /** 开始新会话 */
+    fun startNewChat() {
+        streamJob?.cancel()
+        _messages.value = emptyList()
+        _isStreaming.value = false
+        conversationId = null
+        _conversationTitle.value = null
+    }
+
+    /** 加载历史会话消息，并还原商品卡片 */
+    fun loadConversation(cid: String, title: String?) {
+        streamJob?.cancel()
+        _messages.value = emptyList()
+        _isStreaming.value = false
+        conversationId = cid
+        _conversationTitle.value = title
+
+        viewModelScope.launch {
+            val msgs = apiService.getConversationMessages(cid)
+            if (msgs.isNotEmpty()) {
+                // 先构建基础消息列表
+                val chatMsgs = mutableListOf<ChatMessage>()
+                val allProductIds = mutableListOf<String>()
+
+                for (msg in msgs) {
+                    when (msg.role) {
+                        "user" -> chatMsgs.add(ChatMessage.User(msg.content ?: ""))
+                        "ai" -> {
+                            // 去除 [PRODUCT:id] 标签，SSE 流中由后端剥离，历史消息需手动清除
+                            val cleanContent = msg.content?.replace(
+                                Regex("\\[PRODUCT:\\w+]"), ""
+                            )?.trim() ?: ""
+                            chatMsgs.add(ChatMessage.Ai(cleanContent))
+                            // 收集该 AI 消息中引用的商品 ID
+                            msg.productIds?.let { idsJson ->
+                                val ids = parseProductIds(idsJson)
+                                allProductIds.addAll(ids)
+                                // 为每个 ID 先占位 null，后续批量拉取后回填
+                                ids.forEach { _ -> chatMsgs.add(ChatMessage.Ai("")) }
+                            }
+                        }
+                    }
+                }
+
+                _messages.value = chatMsgs
+
+                // 批量拉取商品，回填到占位位置
+                if (allProductIds.isNotEmpty()) {
+                    val products = apiService.getProductsBatch(allProductIds)
+                    val productMap = products.associateBy { it.productId }
+                    val finalList = _messages.value.toMutableList()
+                    var offset = 0
+                    for (msg in msgs) {
+                        if (msg.role == "ai") {
+                            offset++ // skip the Ai message itself
+                            msg.productIds?.let { idsJson ->
+                                val ids = parseProductIds(idsJson)
+                                for (id in ids) {
+                                    val product = productMap[id]
+                                    if (product != null && offset < finalList.size) {
+                                        finalList[offset] = ChatMessage.ProductCard(product)
+                                    }
+                                    offset++
+                                }
+                            }
+                        } else {
+                            offset++
+                        }
+                    }
+                    _messages.value = finalList
+                }
+            }
+        }
+    }
+
+    /** 解析 JSON 数组字符串如 ["p_digital_007","p_beauty_003"] */
+    private fun parseProductIds(json: String): List<String> {
+        return try {
+            com.google.gson.Gson().fromJson(
+                json,
+                Array<String>::class.java
+            ).toList()
+        } catch (e: Exception) {
+            emptyList()
+        }
+    }
+
+    fun getConversationId(): String? = conversationId
 
     private fun append(msg: ChatMessage) {
         _messages.value = _messages.value + msg

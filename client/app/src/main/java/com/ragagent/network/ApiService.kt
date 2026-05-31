@@ -214,4 +214,66 @@ class ApiService {
                 client.newCall(request).execute().isSuccessful
             } catch (e: Exception) { false }
         }
+
+    // ========== 会话历史 API ==========
+
+    data class ConversationDto(
+        val id: Long,
+        val userId: Long,
+        val conversationId: String,
+        val title: String?,
+        val createdAt: String?,
+        val updatedAt: String?
+    )
+
+    data class MessageDto(
+        val id: Long,
+        val conversationId: Long,
+        val role: String,
+        val content: String?,
+        val productIds: String?,
+        val createdAt: String?
+    )
+
+    suspend fun getConversations(): List<ConversationDto> = withContext(Dispatchers.IO) {
+        try {
+            val request = Request.Builder()
+                .url("$baseUrl/api/conversations")
+                .build()
+            val response = client.newCall(request).execute()
+            if (response.isSuccessful) {
+                val json = response.body?.string() ?: "[]"
+                val type = com.google.gson.reflect.TypeToken.getParameterized(
+                    List::class.java, ConversationDto::class.java).type
+                gson.fromJson(json, type)
+            } else emptyList()
+        } catch (e: Exception) { emptyList() }
+    }
+
+    suspend fun getConversationMessages(conversationId: String): List<MessageDto> =
+        withContext(Dispatchers.IO) {
+            try {
+                val request = Request.Builder()
+                    .url("$baseUrl/api/conversations/$conversationId/messages")
+                    .build()
+                val response = client.newCall(request).execute()
+                if (response.isSuccessful) {
+                    val json = response.body?.string() ?: "[]"
+                    val type = com.google.gson.reflect.TypeToken.getParameterized(
+                        List::class.java, MessageDto::class.java).type
+                    gson.fromJson(json, type)
+                } else emptyList()
+            } catch (e: Exception) { emptyList() }
+        }
+
+    suspend fun deleteConversation(conversationId: String): Boolean =
+        withContext(Dispatchers.IO) {
+            try {
+                val request = Request.Builder()
+                    .url("$baseUrl/api/conversations/$conversationId")
+                    .delete()
+                    .build()
+                client.newCall(request).execute().isSuccessful
+            } catch (e: Exception) { false }
+        }
 }

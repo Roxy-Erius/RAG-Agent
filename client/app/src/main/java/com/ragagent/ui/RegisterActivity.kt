@@ -46,6 +46,7 @@ class RegisterActivity : AppCompatActivity() {
                 val ok = apiService.register(username, password)
                 if (ok) {
                     Toast.makeText(this@RegisterActivity, "注册成功，请登录", Toast.LENGTH_SHORT).show()
+                    setResult(RESULT_OK)
                     finish()
                 } else {
                     binding.tvError.text = "注册失败，用户名可能已存在"
