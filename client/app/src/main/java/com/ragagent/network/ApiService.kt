@@ -5,6 +5,7 @@ import com.ragagent.BuildConfig
 import com.ragagent.model.Product
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import java.util.concurrent.TimeUnit
@@ -17,6 +18,16 @@ class ApiService {
     private val client = OkHttpClient.Builder()
         .connectTimeout(10, TimeUnit.SECONDS)
         .readTimeout(30, TimeUnit.SECONDS)
+        .addInterceptor { chain ->
+            val original = chain.request()
+            val token = com.ragagent.auth.AuthManager.getToken()
+            val request = if (token != null) {
+                original.newBuilder()
+                    .header("Authorization", "Bearer $token")
+                    .build()
+            } else original
+            chain.proceed(request)
+        }
         .build()
 
     private val gson = Gson()
@@ -159,4 +170,48 @@ class ApiService {
             } else emptyList()
         } catch (e: Exception) { emptyList() }
     }
+
+    // ========== 用户认证 ==========
+
+    data class LoginResponse(val token: String, val username: String)
+
+    suspend fun login(username: String, password: String): LoginResponse? =
+        withContext(Dispatchers.IO) {
+            try {
+                val json = gson.toJson(mapOf("username" to username, "password" to password))
+                val request = Request.Builder()
+                    .url("$baseUrl/api/auth/login")
+                    .post(okhttp3.RequestBody.create(
+                        "application/json".toMediaType(), json))
+                    .build()
+                val response = client.newCall(request).execute()
+                if (response.isSuccessful) {
+                    response.body?.string()?.let { gson.fromJson(it, LoginResponse::class.java) }
+                } else null
+            } catch (e: Exception) { null }
+        }
+
+    suspend fun register(username: String, password: String): Boolean =
+        withContext(Dispatchers.IO) {
+            try {
+                val json = gson.toJson(mapOf("username" to username, "password" to password))
+                val request = Request.Builder()
+                    .url("$baseUrl/api/auth/register")
+                    .post(okhttp3.RequestBody.create(
+                        "application/json".toMediaType(), json))
+                    .build()
+                client.newCall(request).execute().isSuccessful
+            } catch (e: Exception) { false }
+        }
+
+    suspend fun linkSession(sessionId: String): Boolean =
+        withContext(Dispatchers.IO) {
+            try {
+                val request = Request.Builder()
+                    .url("$baseUrl/api/auth/link-session?sessionId=$sessionId")
+                    .post(okhttp3.RequestBody.create(null, ByteArray(0)))
+                    .build()
+                client.newCall(request).execute().isSuccessful
+            } catch (e: Exception) { false }
+        }
 }
