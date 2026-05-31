@@ -37,4 +37,9 @@ public class CartService {
         log.debug("查询购物车 | sessionId={}", sessionId);
         return cartRepository.findBySessionId(sessionId);
     }
+
+    public void migrateCart(String sessionId, Long userId) {
+        log.info("购物车迁移 | sessionId={} → userId={}", sessionId, userId);
+        cartRepository.migrateSessionToUser(sessionId, userId);
+    }
 }

@@ -99,4 +99,9 @@ public class CartRepository {
                 "WHERE c.session_id = ? ORDER BY c.created_at DESC",
                 ROW_MAPPER, sessionId);
     }
+
+    public void migrateSessionToUser(String sessionId, Long userId) {
+        jdbc.update("UPDATE cart_items SET user_id = ? WHERE session_id = ? AND user_id IS NULL",
+                userId, sessionId);
+    }
 }
