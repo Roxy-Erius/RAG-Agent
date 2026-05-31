@@ -41,7 +41,7 @@
     <TextView android:id="@+id/btnLogin" android:layout_width="match_parent"
         android:layout_height="50dp" android:text="登 录" android:textColor="#FFFFFF"
         android:textSize="16sp" android:textStyle="bold" android:gravity="center"
-        android:background="@drawable/bg_send_button" android:layout_marginTop="16dp"
+        android:background="@drawable/bg_auth_button" android:layout_marginTop="16dp"
         android:elevation="3dp" android:clickable="true" android:focusable="true" />
 
     <View android:layout_width="0dp" android:layout_height="0dp" android:layout_weight="1" />
