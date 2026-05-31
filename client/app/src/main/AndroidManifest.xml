@@ -27,5 +27,9 @@
         <activity
             android:name=".ui.ProductCardActivity"
             android:exported="false" />
+
+        <activity
+            android:name=".ui.CartActivity"
+            android:exported="false" />
     </application>
 </manifest>
