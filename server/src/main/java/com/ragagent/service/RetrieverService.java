@@ -94,7 +94,7 @@ public class RetrieverService {
         return imageCollectionId;
     }
 
-    public List<String> retrieveByText(String query, int topK) {
+    public List<String> okretrieveByText(String query, int topK) {
         return retrieveByText(query, topK, null);
     }
 
@@ -124,6 +124,7 @@ public class RetrieverService {
      * 文本检索 + DB 联查，返回带完整商品信息的结果（供 ChatService 使用）。
      */
     public List<ProductSearchResult> retrieveProductsByText(String query, int topK, String category) {
+        log.debug("向量检索: query=\"{}\" topK={} category={}", query, topK, category);
         float[] queryVector = embeddingService.embedText(query);
 
         JsonObject whereFilter = null;
@@ -142,6 +143,12 @@ public class RetrieverService {
                 .sorted(Comparator.comparingDouble(ScoredResult::getScore).reversed())
                 .limit(topK)
                 .toList();
+
+        log.debug("向量检索结果: raw={} filtered={} threshold={}",
+                results.size(), topResults.size(), threshold);
+        for (ScoredResult r : topResults) {
+            log.debug("  {} | score={:.4f}", r.productId, r.score);
+        }
 
         List<String> productIds = topResults.stream().map(r -> r.productId).toList();
         List<Product> products = productRepository.findByIds(productIds);

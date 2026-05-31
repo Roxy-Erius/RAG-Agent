@@ -3,16 +3,19 @@ package com.ragagent.controller;
 import com.ragagent.model.Product;
 import com.ragagent.repository.ProductRepository;
 import com.ragagent.service.RetrieverService;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.Arrays;
 import java.util.List;
-import java.util.Map;
 
 @RestController
 @RequestMapping("/api/products")
 public class ProductController {
+
+    private static final Logger log = LoggerFactory.getLogger(ProductController.class);
 
     private final ProductRepository productRepository;
     private final RetrieverService retrieverService;
@@ -24,8 +27,10 @@ public class ProductController {
 
     @GetMapping("/{id}")
     public ResponseEntity<Product> getProduct(@PathVariable String id) {
+        log.debug("GET /api/products/{}", id);
         Product product = productRepository.findById(id);
         if (product == null) {
+            log.warn("商品不存在: {}", id);
             return ResponseEntity.notFound().build();
         }
         return ResponseEntity.ok(product);
@@ -37,6 +42,7 @@ public class ProductController {
                 .map(String::trim)
                 .filter(s -> !s.isEmpty())
                 .toList();
+        log.debug("GET /api/products/batch | ids={} | count={}", ids, idList.size());
         List<Product> products = productRepository.findByIds(idList);
         return ResponseEntity.ok(products);
     }
@@ -46,7 +52,9 @@ public class ProductController {
             @RequestParam String query,
             @RequestParam(defaultValue = "3") int topK,
             @RequestParam(required = false) String category) {
+        log.info("==> 语义搜索 | query=\"{}\" | topK={} | category={}", query, topK, category);
         List<String> productIds = retrieverService.retrieveByText(query, topK, category);
+        log.info("<== 语义搜索结果 | query=\"{}\" | found={}", query, productIds.size());
         List<Product> products = productRepository.findByIds(productIds);
         return ResponseEntity.ok(products);
     }

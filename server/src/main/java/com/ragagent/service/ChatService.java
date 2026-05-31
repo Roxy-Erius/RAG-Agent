@@ -26,12 +26,25 @@ public class ChatService {
     private static final String SYSTEM_PROMPT_TEMPLATE = """
             你是一个专业的电商导购助手。你的职责是根据用户需求，从商品库中推荐最合适的商品。
 
+            ## 决策流程（先判断再行动）
+            1. 用户的需求是否具体？（有品类、价位、肤质、品牌等明确信息）
+               → 是：直接推荐
+               → 否：必须先追问，绝对不能直接推荐
+            2. 用户说"护肤品"、"数码产品"、"买衣服"等模糊大品类 → 追问
+            3. 用户说"想买东西"、"有什么好的"等完全无目标 → 追问
+            4. 用户说"油皮洗面奶"、"200元蓝牙耳机"等具体需求 → 推荐
+
             ## 严格规则
             1. 你只能推荐下方【商品库】中列出的商品，绝对不能推荐不存在的商品
             2. 你不能编造商品的价格、规格、优惠信息等任何参数
             3. 如果商品库中没有匹配的商品，请如实告知用户，不要编造
             4. 回复要简洁专业，适合移动端阅读，控制在200字以内
-            5. 当用户需求模糊时，主动提问引导用户细化需求
+            5. 用户需求模糊时，必须先追问再推荐。追问时给出2-3个具体方向引导用户（如品类、价位、肤质等）
+
+            ## 追问示例
+            用户："推荐护肤品"
+            ✅ 正确："请问您想要什么类型的护肤品呢？我们有精华、面霜、洁面等品类，您也可以告诉我您的肤质和预算~"
+            ❌ 错误："推荐雅诗兰黛精华 [PRODUCT:p_beauty_001]..."
 
             ## 推荐技巧
             - 结合商品的实际卖点和用户需求，给出1-2句有说服力的推荐理由
@@ -83,10 +96,14 @@ public class ChatService {
         try {
             // ① Retrieval: 检索相关商品（带完整信息 + score）
             //    先去噪音词，再多轮增强，避免口语化词汇干扰 embedding
+            log.info("┌─ RAG 流式对话开始 | sessionId={}", sessionId);
             String cleaned = preprocessQuery(userMessage);
             String retrievalQuery = augmentQuery(sessionId, cleaned);
+            log.info("│ 预处理: \"{}\" → \"{}\"", userMessage, retrievalQuery);
             List<ProductSearchResult> products = retrieverService.retrieveProductsByText(retrievalQuery, ragConfig.getTopK(), null);
-            log.info("检索到 {} 条商品，sessionId={}", products.size(), sessionId);
+            log.info("│ 检索结果: {} 条 | ids={}",
+                    products.size(),
+                    products.stream().map(ProductSearchResult::getProductId).toList());
 
             // ② Augmentation: 拼装上下文
             String context = formatProducts(products);
@@ -101,6 +118,8 @@ public class ChatService {
                     .collect(java.util.stream.Collectors.toSet());
 
             // ④ Generation: 调用 LLM 流式生成
+            log.info("│ 调用 LLM...");
+            long startTime = System.currentTimeMillis();
             StringBuilder fullResponse = new StringBuilder();
             streamingChatModel.generate(messages, new StreamingResponseHandler<AiMessage>() {
                 @Override
@@ -124,7 +143,9 @@ public class ChatService {
                         String reply = sanitizeProductTags(fullResponse.toString(), validIds);
                         sessionService.addUserMessage(sessionId, userMessage);
                         sessionService.addAiMessage(sessionId, reply);
-                        log.info("对话完成，sessionId={}, 回复长度={}", sessionId, reply.length());
+                        long elapsed = System.currentTimeMillis() - startTime;
+                        log.info("└─ 对话完成 | sessionId={} | 回复长度={} | 耗时={}ms",
+                                sessionId, reply.length(), elapsed);
                         emitter.send(SseEmitter.event().data("{\"type\":\"done\"}"));
                         emitter.complete();
                     } catch (Exception e) {
@@ -237,19 +258,25 @@ public class ChatService {
      *   → augmented: "保湿面霜 有没有更便宜的"
      */
     private String augmentQuery(String sessionId, String currentQuery) {
-        List<String> recentMsgs = sessionService.getRecentUserMessages(sessionId, 1);
+        List<String> recentMsgs = sessionService.getRecentUserMessages(sessionId, 3);
         if (recentMsgs.isEmpty()) {
             return currentQuery;
         }
-        // 历史消息也要去噪音词，否则拼接后噪音词会污染检索 query
-        String lastUserMsg = preprocessQuery(recentMsgs.get(0));
-        // 如果当前 query 很短（追问），把上一轮消息拼上去
-        if (currentQuery.length() < 20 && lastUserMsg.length() > 2) {
-            String augmented = lastUserMsg + " " + currentQuery;
-            log.debug("query 增强: '{}' → '{}'", currentQuery, augmented);
-            return augmented;
+        // 提取历史关键词，去重去当前
+        String currentCleaned = preprocessQuery(currentQuery);
+        List<String> keywords = new ArrayList<>();
+        for (String msg : recentMsgs) {
+            String cleaned = preprocessQuery(msg);
+            if (!cleaned.isEmpty() && !cleaned.equals(currentCleaned)) {
+                keywords.add(cleaned);
+            }
         }
-        return currentQuery;
+        if (keywords.isEmpty()) {
+            return currentQuery;
+        }
+        String augmented = String.join(" ", keywords) + " " + currentQuery;
+        log.debug("query 增强: '{}' → '{}'", currentQuery, augmented);
+        return augmented;
     }
 
     /**
@@ -316,10 +343,12 @@ public class ChatService {
         Matcher m = PRODUCT_TAG_PATTERN.matcher(buf);
         int lastEnd = 0;
         while (m.find()) {
+            String productId = m.group(1);
             String before = buf.substring(lastEnd, m.start());
             emitTokens(emitter, before);
             emitter.send(SseEmitter.event().data(
-                    "{\"type\":\"product\",\"productId\":\"" + m.group(1) + "\"}"));
+                    "{\"type\":\"product\",\"productId\":\"" + productId + "\"}"));
+            log.debug("  SSE → product: {}", productId);
             lastEnd = m.end();
         }
 
