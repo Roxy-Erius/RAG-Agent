@@ -88,4 +88,25 @@ public class CartController {
         }
         return ResponseEntity.ok(items);
     }
+
+    /**
+     * 直接设置购物车数量（对话驱动加购 set 模式用）
+     * POST /api/cart/set?sessionId=xxx&productId=xxx&quantity=3
+     */
+    @PostMapping("/set")
+    public ResponseEntity<Void> setQuantity(
+            @RequestParam String sessionId,
+            @RequestParam String productId,
+            @RequestParam int quantity,
+            HttpServletRequest request) {
+        Long userId = jwtAuthFilter.getUserId(request);
+        log.info("==> POST /api/cart/set | sessionId={} | userId={} | productId={} | quantity={}",
+                sessionId, userId, productId, quantity);
+        if (userId != null) {
+            cartService.setCartQuantity(sessionId, userId, productId, quantity);
+        } else {
+            cartService.setCartQuantity(sessionId, productId, quantity);
+        }
+        return ResponseEntity.ok().build();
+    }
 }

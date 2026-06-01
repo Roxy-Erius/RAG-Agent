@@ -159,4 +159,32 @@ public class CartRepository {
         jdbc.update("UPDATE cart_items SET user_id = ? WHERE session_id = ? AND user_id IS NULL",
                 userId, sessionId);
     }
+
+    /** 直接设置数量（session 维度），不存在则插入 */
+    public void setQuantity(String sessionId, String productId, int quantity) {
+        List<CartItem> existing = jdbc.query(
+                "SELECT * FROM cart_items WHERE session_id = ? AND product_id = ?",
+                PLAIN_MAPPER, sessionId, productId);
+        if (!existing.isEmpty()) {
+            jdbc.update("UPDATE cart_items SET quantity = ? WHERE id = ?",
+                    quantity, existing.get(0).getId());
+        } else {
+            jdbc.update("INSERT INTO cart_items (session_id, product_id, quantity) VALUES (?, ?, ?)",
+                    sessionId, productId, quantity);
+        }
+    }
+
+    /** 直接设置数量（用户维度），不存在则插入 */
+    public void setQuantityByUser(Long userId, String productId, int quantity) {
+        List<CartItem> existing = jdbc.query(
+                "SELECT * FROM cart_items WHERE user_id = ? AND product_id = ?",
+                PLAIN_MAPPER, userId, productId);
+        if (!existing.isEmpty()) {
+            jdbc.update("UPDATE cart_items SET quantity = ? WHERE id = ?",
+                    quantity, existing.get(0).getId());
+        } else {
+            jdbc.update("INSERT INTO cart_items (user_id, product_id, quantity) VALUES (?, ?, ?)",
+                    userId, productId, quantity);
+        }
+    }
 }

@@ -8,7 +8,7 @@ import com.google.gson.annotations.SerializedName
 sealed class SseEvent {
     data class Token(val content: String) : SseEvent()
     data class ProductRef(val productId: String) : SseEvent()
-    data class AddToCart(val productId: String, val quantity: Int = 1) : SseEvent()
+    data class AddToCart(val productId: String, val quantity: Int = 1, val mode: String = "add") : SseEvent()
     data class Done(val conversationId: String = "") : SseEvent()
     data class Error(val message: String) : SseEvent()
 }
@@ -21,13 +21,14 @@ data class SseEventDto(
     val content: String?,
     val productId: String?,
     val quantity: Int?,
+    val mode: String?,
     val conversationId: String?,
     val message: String?
 ) {
     fun toSseEvent(): SseEvent = when (type) {
         "token" -> SseEvent.Token(content ?: "")
         "product" -> SseEvent.ProductRef(productId ?: "")
-        "add_to_cart" -> SseEvent.AddToCart(productId ?: "", quantity ?: 1)
+        "add_to_cart" -> SseEvent.AddToCart(productId ?: "", quantity ?: 1, mode ?: "add")
         "done" -> SseEvent.Done(conversationId ?: "")
         "error" -> SseEvent.Error(message ?: "未知错误")
         else -> SseEvent.Error("未知消息类型: $type")

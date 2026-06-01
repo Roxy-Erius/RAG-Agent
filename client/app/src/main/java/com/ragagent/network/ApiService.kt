@@ -132,6 +132,17 @@ class ApiService {
             } catch (e: Exception) { null }
         }
 
+    suspend fun setCartQuantity(sessionId: String, productId: String, quantity: Int): Boolean =
+        withContext(Dispatchers.IO) {
+            try {
+                val request = Request.Builder()
+                    .url("$baseUrl/api/cart/set?sessionId=$sessionId&productId=$productId&quantity=$quantity")
+                    .post(okhttp3.RequestBody.create(null, ByteArray(0)))
+                    .build()
+                client.newCall(request).execute().isSuccessful
+            } catch (e: Exception) { false }
+        }
+
     suspend fun removeFromCart(id: Long, sessionId: String): Boolean = withContext(Dispatchers.IO) {
         try {
             val request = Request.Builder()

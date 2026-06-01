@@ -62,4 +62,16 @@ public class CartService {
         log.debug("查询购物车(user) | userId={}", userId);
         return cartRepository.findByUserId(userId);
     }
+
+    public void setCartQuantity(String sessionId, String productId, int quantity) {
+        log.info("设置购物车数量(session) | sessionId={} | productId={} | quantity={}",
+                sessionId, productId, quantity);
+        cartRepository.setQuantity(sessionId, productId, quantity);
+    }
+
+    public void setCartQuantity(String sessionId, Long userId, String productId, int quantity) {
+        log.info("设置购物车数量(user) | userId={} | productId={} | quantity={}",
+                userId, productId, quantity);
+        cartRepository.setQuantityByUser(userId, productId, quantity);
+    }
 }

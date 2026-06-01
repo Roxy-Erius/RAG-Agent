@@ -87,8 +87,15 @@ class ChatViewModel : ViewModel() {
                             removeLoading()
                             loadingRemoved = true
                         }
-                        // 对话驱动加购：触发 API 调用（带数量）+ 更新角标
-                        addToCart(event.productId, event.quantity)
+                        // 对话驱动加购：set 模式设总量，add 模式增量
+                        if (event.mode == "set") {
+                            viewModelScope.launch {
+                                apiService.setCartQuantity(sessionId, event.productId, event.quantity)
+                                refreshCartCount()
+                            }
+                        } else {
+                            addToCart(event.productId, event.quantity)
+                        }
                     }
                     is SseEvent.Done -> {
                         if (!loadingRemoved) {
