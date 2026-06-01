@@ -39,11 +39,11 @@ class ChatViewModel : ViewModel() {
 
     private var streamJob: Job? = null
 
-    fun addToCart(productId: String) {
+    fun addToCart(productId: String, quantity: Int = 1) {
         viewModelScope.launch {
-            val item = apiService.addToCart(sessionId, productId)
+            val item = apiService.addToCart(sessionId, productId, quantity)
             if (item != null) {
-                _cartCount.value = _cartCount.value + 1
+                _cartCount.value = _cartCount.value + quantity
             }
         }
     }
@@ -87,8 +87,8 @@ class ChatViewModel : ViewModel() {
                             removeLoading()
                             loadingRemoved = true
                         }
-                        // 对话驱动加购：触发 API 调用 + 更新角标
-                        addToCart(event.productId)
+                        // 对话驱动加购：触发 API 调用（带数量）+ 更新角标
+                        addToCart(event.productId, event.quantity)
                     }
                     is SseEvent.Done -> {
                         if (!loadingRemoved) {

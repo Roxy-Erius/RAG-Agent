@@ -61,18 +61,22 @@ public class ChatService {
             ## 加购指令（重要！）
             当用户表达了"加入购物车"、"加购"、"帮我加这个"、"买这个"等意图时：
             1. 从对话历史中找到最近推荐的商品（上文出现过的 [PRODUCT:id]）
-            2. 回复格式：确认文字 + [ADD_TO_CART:商品ID]
+            2. 加购格式：
+               - 默认 1 件：[ADD_TO_CART:商品ID]
+               - 指定数量：[ADD_TO_CART:商品ID:数量]
                示例："好的，已为您将珊珂洁面乳加入购物车 [ADD_TO_CART:p_beauty_011]"
-            3. 如果上文没有推荐过商品，回复："请问您想把哪款商品加入购物车呢？"
-            4. 如果上文推荐过多款商品，默认加最近推荐的那一款
-            5. 注意：用户只是问价格、问详情时不要触发加购，仅明确表达加购意图才使用 ADD_TO_CART
+               示例："已加购 3 台 [ADD_TO_CART:p_digital_007:3]"
+            3. 用户说"要三台"、"再来两个"等 → 输出增量数量，如用户说"再来两台"且之前已加1台 → [ADD_TO_CART:p_001:2]
+            4. 如果上文没有推荐过商品，回复："请问您想把哪款商品加入购物车呢？"
+            5. 如果上文推荐过多款商品，默认加最近推荐的那一款
+            6. 注意：用户只是问价格、问详情时不要触发加购，仅明确表达加购意图才使用 ADD_TO_CART
 
             ## 商品库
             %s
             """;
 
     private static final Pattern PRODUCT_TAG_PATTERN = Pattern.compile("\\[PRODUCT:(\\w+)]");
-    private static final Pattern ADD_TO_CART_PATTERN = Pattern.compile("\\[ADD_TO_CART:(\\w+)]");
+    private static final Pattern ADD_TO_CART_PATTERN = Pattern.compile("\\[ADD_TO_CART:(\\w+)(?::(\\d+))?]");
 
     // SSE 缓冲：累积 LLM token，检测完整 [PRODUCT:id] 后才分类发送
     private final StringBuilder sseBuffer = new StringBuilder();
@@ -372,8 +376,8 @@ public class ChatService {
 
     // ========== SSE 缓冲发送（技术路线 2.5 节：结构化 JSON） ==========
 
-    /** 匹配 [PRODUCT:id] 和 [ADD_TO_CART:id] 两种标签 */
-    private static final Pattern TAG_PATTERN = Pattern.compile("\\[(PRODUCT|ADD_TO_CART):(\\w+)]");
+    /** 匹配 [PRODUCT:id] / [ADD_TO_CART:id] / [ADD_TO_CART:id:qty] */
+    private static final Pattern TAG_PATTERN = Pattern.compile("\\[(PRODUCT|ADD_TO_CART):(\\w+)(?::(\\d+))?]");
 
     /**
      * 从缓冲区中检测完整的 [PRODUCT:id] / [ADD_TO_CART:id] 标签，分类发送 SSE 事件。
@@ -388,12 +392,14 @@ public class ChatService {
         while (m.find()) {
             String tagType = m.group(1);       // "PRODUCT" or "ADD_TO_CART"
             String id = m.group(2);
+            String qtyStr = m.group(3);        // null for PRODUCT, optional for ADD_TO_CART
             String before = buf.substring(lastEnd, m.start());
             emitTokens(emitter, before);
             if ("ADD_TO_CART".equals(tagType)) {
+                int qty = qtyStr != null ? Integer.parseInt(qtyStr) : 1;
                 emitter.send(SseEmitter.event().data(
-                        "{\"type\":\"add_to_cart\",\"productId\":\"" + id + "\"}"));
-                log.debug("  SSE → add_to_cart: {}", id);
+                        "{\"type\":\"add_to_cart\",\"productId\":\"" + id + "\",\"quantity\":" + qty + "}"));
+                log.debug("  SSE → add_to_cart: {} x{}", id, qty);
             } else {
                 emitter.send(SseEmitter.event().data(
                         "{\"type\":\"product\",\"productId\":\"" + id + "\"}"));
