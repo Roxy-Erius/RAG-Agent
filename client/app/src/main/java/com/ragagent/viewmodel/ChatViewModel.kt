@@ -87,7 +87,6 @@ class ChatViewModel : ViewModel() {
                             removeLoading()
                             loadingRemoved = true
                         }
-                        // 对话驱动加购：set 模式设总量，add 模式增量
                         if (event.mode == "set") {
                             viewModelScope.launch {
                                 apiService.setCartQuantity(sessionId, event.productId, event.quantity)
@@ -95,6 +94,30 @@ class ChatViewModel : ViewModel() {
                             }
                         } else {
                             addToCart(event.productId, event.quantity)
+                        }
+                    }
+                    is SseEvent.DeleteFromCart -> {
+                        if (!loadingRemoved) {
+                            removeLoading()
+                            loadingRemoved = true
+                        }
+                        viewModelScope.launch {
+                            apiService.removeFromCart(event.cartItemId, sessionId)
+                            refreshCartCount()
+                        }
+                    }
+                    is SseEvent.ClearCart -> {
+                        if (!loadingRemoved) {
+                            removeLoading()
+                            loadingRemoved = true
+                        }
+                        viewModelScope.launch {
+                            // 清空购物车：逐一删除所有项
+                            val items = apiService.getCart(sessionId)
+                            for (item in items) {
+                                apiService.removeFromCart(item.id, sessionId)
+                            }
+                            refreshCartCount()
                         }
                     }
                     is SseEvent.Done -> {

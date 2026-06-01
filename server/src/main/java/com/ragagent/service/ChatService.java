@@ -73,6 +73,16 @@ public class ChatService {
             5. 如果上文推荐过多款商品，默认加最近推荐的那一款
             6. 注意：用户只是问价格、问详情时不要触发加购，仅明确表达加购意图才使用 ADD_TO_CART
 
+            ## 用户购物车
+            %s
+
+            ## 购物车操作
+            - 用户问"购物车有什么"→ 直接列出上方购物车中的商品
+            - 用户要求删除购物车某商品 → 输出 [DELETE_FROM_CART:购物车项ID]
+              示例："好的，已删除 [DELETE_FROM_CART:5]"
+            - 用户要求清空购物车 → 输出 [CLEAR_CART]
+              示例："好的，已清空购物车 [CLEAR_CART]"
+
             ## 商品库
             %s
             """;
@@ -96,17 +106,20 @@ public class ChatService {
     private final OpenAiStreamingChatModel streamingChatModel;
     private final SessionService sessionService;
     private final ConversationService conversationService;
+    private final CartService cartService;
 
     public ChatService(RagConfig ragConfig,
                        RetrieverService retrieverService,
                        OpenAiStreamingChatModel streamingChatModel,
                        SessionService sessionService,
-                       ConversationService conversationService) {
+                       ConversationService conversationService,
+                       CartService cartService) {
         this.ragConfig = ragConfig;
         this.retrieverService = retrieverService;
         this.streamingChatModel = streamingChatModel;
         this.sessionService = sessionService;
         this.conversationService = conversationService;
+        this.cartService = cartService;
     }
 
     /**
@@ -130,7 +143,8 @@ public class ChatService {
 
             // ② Augmentation: 拼装上下文
             String context = formatProducts(products);
-            String systemPrompt = String.format(SYSTEM_PROMPT_TEMPLATE, context);
+            String cartInfo = formatCart(sessionId, userId);
+            String systemPrompt = String.format(SYSTEM_PROMPT_TEMPLATE, cartInfo, context);
 
             // ③ 构建消息列表: [system, history..., user]
             List<ChatMessage> messages = buildMessages(sessionId, systemPrompt, userMessage);
@@ -212,7 +226,8 @@ public class ChatService {
         String retrievalQuery = augmentQuery(sessionId, cleaned);
         List<ProductSearchResult> products = retrieverService.retrieveProductsByText(retrievalQuery, ragConfig.getTopK(), null);
         String context = formatProducts(products);
-        String systemPrompt = String.format(SYSTEM_PROMPT_TEMPLATE, context);
+        String cartInfo = formatCart(sessionId, userId);
+        String systemPrompt = String.format(SYSTEM_PROMPT_TEMPLATE, cartInfo, context);
         List<ChatMessage> messages = buildMessages(sessionId, systemPrompt, userMessage);
 
         Set<String> validIds = products.stream()
@@ -296,19 +311,19 @@ public class ChatService {
     }
 
     /**
-     * 多轮对话 query 增强：把上一轮用户消息拼到当前 query 前面，
-     * 避免追问（如"有没有更便宜的"）因缺乏上下文导致检索为空。
-     *
-     * 示例：
-     *   history: ["推荐保湿面霜"]  current: "有没有更便宜的"
-     *   → augmented: "保湿面霜 有没有更便宜的"
+     * 多轮对话 query 增强：仅当当前问题是追问/引用类短句时才拼接历史关键词，
+     * 避免独立新话题被前文污染（如聊完手机再聊护肤品）。
      */
     private String augmentQuery(String sessionId, String currentQuery) {
+        // 独立话题检测：完整话题不拼接历史
+        if (!isFollowUp(currentQuery)) {
+            log.debug("query 增强跳过（独立话题）: '{}'", currentQuery);
+            return currentQuery;
+        }
         List<String> recentMsgs = sessionService.getRecentUserMessages(sessionId, 3);
         if (recentMsgs.isEmpty()) {
             return currentQuery;
         }
-        // 提取历史关键词，去重去当前
         String currentCleaned = preprocessQuery(currentQuery);
         List<String> keywords = new ArrayList<>();
         for (String msg : recentMsgs) {
@@ -323,6 +338,24 @@ public class ChatService {
         String augmented = String.join(" ", keywords) + " " + currentQuery;
         log.debug("query 增强: '{}' → '{}'", currentQuery, augmented);
         return augmented;
+    }
+
+    /** 判断是否为追问/引用类短句（需要上下文增强） */
+    private boolean isFollowUp(String query) {
+        String q = query.trim();
+        // 短句大概率是追问
+        if (q.length() <= 6) return true;
+        // 含有指代词 → 追问
+        if (q.contains("这个") || q.contains("那个") || q.contains("它")
+                || q.contains("这") || q.contains("那")) return true;
+        // 含有比较/增量词 → 追问
+        if (q.contains("更") || q.contains("再") || q.contains("还")
+                || q.contains("不要") || q.contains("排除") || q.contains("除了")) return true;
+        // 含有"加入购物车"、"加购"等 → 需要上下文知道加哪个
+        if (q.contains("购物车") || q.contains("加购") || q.contains("买这个")
+                || q.contains("买它") || q.contains("下单")) return true;
+        // 其他情况 → 独立话题，不需要增强
+        return false;
     }
 
     /**
@@ -371,6 +404,32 @@ public class ChatService {
         return sb.toString();
     }
 
+    /** 获取用户购物车内容文本，注入 System Prompt */
+    private String formatCart(String sessionId, Long userId) {
+        try {
+            List<com.ragagent.model.CartItem> items;
+            if (userId != null) {
+                items = cartService.getCartByUser(userId);
+            } else {
+                items = cartService.getCart(sessionId);
+            }
+            if (items == null || items.isEmpty()) {
+                return "（购物车为空）";
+            }
+            StringBuilder sb = new StringBuilder();
+            for (int i = 0; i < items.size(); i++) {
+                com.ragagent.model.CartItem item = items.get(i);
+                String title = item.getProductTitle() != null ? item.getProductTitle() : item.getProductId();
+                sb.append(String.format("%d. %s x%d (购物车ID:%d)\n",
+                        i + 1, title, item.getQuantity(), item.getId()));
+            }
+            return sb.toString();
+        } catch (Exception e) {
+            log.warn("获取购物车失败: {}", e.getMessage());
+            return "（暂时无法获取购物车信息）";
+        }
+    }
+
     private String truncate(String text, int maxLen) {
         if (text == null) return "";
         return text.length() > maxLen ? text.substring(0, maxLen) + "..." : text;
@@ -378,8 +437,9 @@ public class ChatService {
 
     // ========== SSE 缓冲发送（技术路线 2.5 节：结构化 JSON） ==========
 
-    /** 匹配 [PRODUCT:id] / [ADD_TO_CART:id] / [ADD_TO_CART:id:qty] / [ADD_TO_CART:id:+qty] */
-    private static final Pattern TAG_PATTERN = Pattern.compile("\\[(PRODUCT|ADD_TO_CART):(\\w+)(?::(\\+?\\d+))?]");
+    /** 匹配 [PRODUCT:id] / [ADD_TO_CART:id:qty] / [DELETE_FROM_CART:id] / [CLEAR_CART] */
+    private static final Pattern TAG_PATTERN = Pattern.compile(
+            "\\[(PRODUCT|ADD_TO_CART|DELETE_FROM_CART|CLEAR_CART)(?::(\\w+)(?::(\\+?\\d+))?)?]");
 
     /**
      * 从缓冲区中检测完整的 [PRODUCT:id] / [ADD_TO_CART:id] 标签，分类发送 SSE 事件。
@@ -414,6 +474,14 @@ public class ChatService {
                         "{\"type\":\"add_to_cart\",\"productId\":\"" + id +
                         "\",\"quantity\":" + qty + ",\"mode\":\"" + mode + "\"}"));
                 log.debug("  SSE → add_to_cart: {} {} {}", id, qty, mode);
+            } else if ("DELETE_FROM_CART".equals(tagType)) {
+                emitter.send(SseEmitter.event().data(
+                        "{\"type\":\"delete_from_cart\",\"cartItemId\":" + id + "}"));
+                log.debug("  SSE → delete_from_cart: {}", id);
+            } else if ("CLEAR_CART".equals(tagType)) {
+                emitter.send(SseEmitter.event().data(
+                        "{\"type\":\"clear_cart\"}"));
+                log.debug("  SSE → clear_cart");
             } else {
                 emitter.send(SseEmitter.event().data(
                         "{\"type\":\"product\",\"productId\":\"" + id + "\"}"));
@@ -440,7 +508,9 @@ public class ChatService {
             if ("[DONE".startsWith(possibleTag)
                     || "[PRODUCT:".startsWith(possibleTag)
                     || "[ADD_TO_CART:".startsWith(possibleTag)
-                    || possibleTag.matches("^\\[(PRODUCT|ADD_TO_CART):\\w*$")) {
+                    || "[DELETE_FROM_CART:".startsWith(possibleTag)
+                    || "[CLEAR_CART".startsWith(possibleTag)
+                    || possibleTag.matches("^\\[(PRODUCT|ADD_TO_CART|DELETE_FROM_CART|CLEAR_CART)[:]?\\w*$")) {
                 emitTokens(emitter, rest.substring(0, bracketIdx));
                 sseBuffer.setLength(0);
                 sseBuffer.append(possibleTag);
