@@ -524,7 +524,8 @@ public class ChatService {
      *               ② 含参数前缀如 [ADD_TO_CART:p_001: → 正则匹配
      */
     private boolean isIncompleteTag(String s) {
-        if (s.length() < 2 || !s.startsWith("[")) return false;
+        if (s.isEmpty() || !s.startsWith("[")) return false;
+        if (s.equals("[")) return true;  // lone bracket always incomplete
         String body = s.substring(1);  // 去掉 '['
 
         // ① body 是某个标签关键词的前缀
