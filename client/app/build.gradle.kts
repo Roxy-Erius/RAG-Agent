@@ -13,9 +13,16 @@ android {
         versionCode = 1
         versionName = "1.0"
 
-        // 后端地址 — 真机 USB 调试用局域网 IP，模拟器改为 http://10.0.2.2:8080
-        // 模拟器用 http://10.0.2.2:8080，真机 USB 用局域网 IP
-buildConfigField("String", "BASE_URL", "\"http://10.0.2.2:8080\"")
+        // 后端地址 — 从 local.properties 读取（不提交到 Git），每人自己配
+        // 模拟器默认 http://10.0.2.2:8080，真机 USB 用局域网 IP
+        val localFile = rootProject.file("local.properties")
+        val baseUrl = if (localFile.exists()) {
+            localFile.readLines()
+                .firstOrNull { it.startsWith("base.url=") }
+                ?.substringAfter("base.url=")
+                ?.trim() ?: "http://10.0.2.2:8080"
+        } else "http://10.0.2.2:8080"
+        buildConfigField("String", "BASE_URL", "\"$baseUrl\"")
     }
 
     buildTypes {
