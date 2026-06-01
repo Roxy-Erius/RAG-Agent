@@ -505,13 +505,7 @@ public class ChatService {
         int bracketIdx = rest.lastIndexOf('[');
         if (bracketIdx >= 0) {
             String possibleTag = rest.substring(bracketIdx);
-            if (possibleTag.startsWith("[DONE")
-                    || possibleTag.startsWith("[PRODUCT:")
-                    || possibleTag.startsWith("[ADD_TO_CART:")
-                    || possibleTag.startsWith("[DELETE_FROM_CART:")
-                    || possibleTag.startsWith("[CLEAR_CART")
-                    || possibleTag.matches(
-                        "^\\[(PRODUCT|ADD_TO_CART|DELETE_FROM_CART|CLEAR_CART)(:\\w*)?(:\\+?\\d*)?$")) {
+            if (isIncompleteTag(possibleTag)) {
                 emitTokens(emitter, rest.substring(0, bracketIdx));
                 sseBuffer.setLength(0);
                 sseBuffer.append(possibleTag);
@@ -522,6 +516,29 @@ public class ChatService {
         // ④ 无风险 → 全量发送
         emitTokens(emitter, rest);
         sseBuffer.setLength(0);
+    }
+
+    /**
+     * 判断缓冲区末尾的片段是否可能是不完整的标签（需要保留等待后续 token）。
+     * 覆盖两种场景：① 极短前缀如 [D, [P → 检查 body 是否为已知关键词的前缀
+     *               ② 含参数前缀如 [ADD_TO_CART:p_001: → 正则匹配
+     */
+    private boolean isIncompleteTag(String s) {
+        if (s.length() < 2 || !s.startsWith("[")) return false;
+        String body = s.substring(1);  // 去掉 '['
+
+        // ① body 是某个标签关键词的前缀
+        if ("DONE".startsWith(body)
+                || "PRODUCT:".startsWith(body)
+                || "ADD_TO_CART:".startsWith(body)
+                || "DELETE_FROM_CART:".startsWith(body)
+                || "CLEAR_CART".startsWith(body)) {
+            return true;
+        }
+
+        // ② body 已包含完整关键词且带参数字段
+        return body.matches("(PRODUCT|ADD_TO_CART|DELETE_FROM_CART):\\w*(:\\+?\\d*)?")
+                || body.equals("CLEAR_CART");
     }
 
     /** 发送文本 token 事件 */
