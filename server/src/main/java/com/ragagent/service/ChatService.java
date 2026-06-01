@@ -505,12 +505,13 @@ public class ChatService {
         int bracketIdx = rest.lastIndexOf('[');
         if (bracketIdx >= 0) {
             String possibleTag = rest.substring(bracketIdx);
-            if ("[DONE".startsWith(possibleTag)
-                    || "[PRODUCT:".startsWith(possibleTag)
-                    || "[ADD_TO_CART:".startsWith(possibleTag)
-                    || "[DELETE_FROM_CART:".startsWith(possibleTag)
-                    || "[CLEAR_CART".startsWith(possibleTag)
-                    || possibleTag.matches("^\\[(PRODUCT|ADD_TO_CART|DELETE_FROM_CART|CLEAR_CART)[:]?\\w*$")) {
+            if (possibleTag.startsWith("[DONE")
+                    || possibleTag.startsWith("[PRODUCT:")
+                    || possibleTag.startsWith("[ADD_TO_CART:")
+                    || possibleTag.startsWith("[DELETE_FROM_CART:")
+                    || possibleTag.startsWith("[CLEAR_CART")
+                    || possibleTag.matches(
+                        "^\\[(PRODUCT|ADD_TO_CART|DELETE_FROM_CART|CLEAR_CART)(:\\w*)?(:\\+?\\d*)?$")) {
                 emitTokens(emitter, rest.substring(0, bracketIdx));
                 sseBuffer.setLength(0);
                 sseBuffer.append(possibleTag);
