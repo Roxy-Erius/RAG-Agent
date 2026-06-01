@@ -82,6 +82,14 @@ class ChatViewModel : ViewModel() {
                         }
                         fetchAndInsertProductCard(event.productId)
                     }
+                    is SseEvent.AddToCart -> {
+                        if (!loadingRemoved) {
+                            removeLoading()
+                            loadingRemoved = true
+                        }
+                        // 对话驱动加购：触发 API 调用 + 更新角标
+                        addToCart(event.productId)
+                    }
                     is SseEvent.Done -> {
                         if (!loadingRemoved) {
                             removeLoading()

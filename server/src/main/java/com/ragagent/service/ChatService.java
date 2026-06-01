@@ -58,11 +58,21 @@ public class ChatService {
             - 推荐商品时必须使用下方准确的商品ID，格式为 [PRODUCT:商品ID]
             - 示例：这款洗面奶非常适合油皮使用 [PRODUCT:p_beauty_001]，价格也很实惠。
 
+            ## 加购指令（重要！）
+            当用户表达了"加入购物车"、"加购"、"帮我加这个"、"买这个"等意图时：
+            1. 从对话历史中找到最近推荐的商品（上文出现过的 [PRODUCT:id]）
+            2. 回复格式：确认文字 + [ADD_TO_CART:商品ID]
+               示例："好的，已为您将珊珂洁面乳加入购物车 [ADD_TO_CART:p_beauty_011]"
+            3. 如果上文没有推荐过商品，回复："请问您想把哪款商品加入购物车呢？"
+            4. 如果上文推荐过多款商品，默认加最近推荐的那一款
+            5. 注意：用户只是问价格、问详情时不要触发加购，仅明确表达加购意图才使用 ADD_TO_CART
+
             ## 商品库
             %s
             """;
 
     private static final Pattern PRODUCT_TAG_PATTERN = Pattern.compile("\\[PRODUCT:(\\w+)]");
+    private static final Pattern ADD_TO_CART_PATTERN = Pattern.compile("\\[ADD_TO_CART:(\\w+)]");
 
     // SSE 缓冲：累积 LLM token，检测完整 [PRODUCT:id] 后才分类发送
     private final StringBuilder sseBuffer = new StringBuilder();
@@ -362,23 +372,33 @@ public class ChatService {
 
     // ========== SSE 缓冲发送（技术路线 2.5 节：结构化 JSON） ==========
 
+    /** 匹配 [PRODUCT:id] 和 [ADD_TO_CART:id] 两种标签 */
+    private static final Pattern TAG_PATTERN = Pattern.compile("\\[(PRODUCT|ADD_TO_CART):(\\w+)]");
+
     /**
-     * 从缓冲区中检测完整的 [PRODUCT:id] 标签，分类发送 token/product 事件。
+     * 从缓冲区中检测完整的 [PRODUCT:id] / [ADD_TO_CART:id] 标签，分类发送 SSE 事件。
      * 未完成的标签（如 "[PRO"）保留在缓冲区等待后续 token 拼接。
      */
     private void flushSseBuffer(SseEmitter emitter) throws java.io.IOException {
         String buf = sseBuffer.toString();
 
-        // ① 查找完整的 [PRODUCT:id] 标签
-        Matcher m = PRODUCT_TAG_PATTERN.matcher(buf);
+        // ① 查找完整的标签
+        Matcher m = TAG_PATTERN.matcher(buf);
         int lastEnd = 0;
         while (m.find()) {
-            String productId = m.group(1);
+            String tagType = m.group(1);       // "PRODUCT" or "ADD_TO_CART"
+            String id = m.group(2);
             String before = buf.substring(lastEnd, m.start());
             emitTokens(emitter, before);
-            emitter.send(SseEmitter.event().data(
-                    "{\"type\":\"product\",\"productId\":\"" + productId + "\"}"));
-            log.debug("  SSE → product: {}", productId);
+            if ("ADD_TO_CART".equals(tagType)) {
+                emitter.send(SseEmitter.event().data(
+                        "{\"type\":\"add_to_cart\",\"productId\":\"" + id + "\"}"));
+                log.debug("  SSE → add_to_cart: {}", id);
+            } else {
+                emitter.send(SseEmitter.event().data(
+                        "{\"type\":\"product\",\"productId\":\"" + id + "\"}"));
+                log.debug("  SSE → product: {}", id);
+            }
             lastEnd = m.end();
         }
 
@@ -399,7 +419,8 @@ public class ChatService {
             String possibleTag = rest.substring(bracketIdx);
             if ("[DONE".startsWith(possibleTag)
                     || "[PRODUCT:".startsWith(possibleTag)
-                    || possibleTag.matches("^\\[PRODUCT:\\w*$")) {
+                    || "[ADD_TO_CART:".startsWith(possibleTag)
+                    || possibleTag.matches("^\\[(PRODUCT|ADD_TO_CART):\\w*$")) {
                 emitTokens(emitter, rest.substring(0, bracketIdx));
                 sseBuffer.setLength(0);
                 sseBuffer.append(possibleTag);
