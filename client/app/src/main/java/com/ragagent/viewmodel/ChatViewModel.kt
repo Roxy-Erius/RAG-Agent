@@ -60,6 +60,7 @@ class ChatViewModel : ViewModel() {
             var aiText = ""
             var loadingRemoved = false
             var aiMessageAppended = false
+            val pendingProductIds = mutableListOf<String>()
 
             sseClient.connect(text, sessionId, conversationId).collect { event ->
                 when (event) {
@@ -80,7 +81,8 @@ class ChatViewModel : ViewModel() {
                             removeLoading()
                             loadingRemoved = true
                         }
-                        fetchAndInsertProductCard(event.productId)
+                        // 暂存商品 ID，Done 时批量拉取，避免切后台丢卡片
+                        pendingProductIds.add(event.productId)
                     }
                     is SseEvent.AddToCart -> {
                         if (!loadingRemoved) {
@@ -125,7 +127,10 @@ class ChatViewModel : ViewModel() {
                             removeLoading()
                             loadingRemoved = true
                         }
-                        // 捕获后端返回的 conversationId（登录用户首条消息后）
+                        // 流式结束后批量拉取商品卡片，避免切后台丢卡片
+                        if (pendingProductIds.isNotEmpty()) {
+                            fetchAndInsertProductCards(pendingProductIds)
+                        }
                         if (event.conversationId.isNotBlank() && conversationId == null) {
                             conversationId = event.conversationId
                         }
@@ -172,9 +177,9 @@ class ChatViewModel : ViewModel() {
                     when (msg.role) {
                         "user" -> chatMsgs.add(ChatMessage.User(msg.content ?: ""))
                         "ai" -> {
-                            // 去除 [PRODUCT:id] 标签，SSE 流中由后端剥离，历史消息需手动清除
+                            // 去除所有标签，SSE 流中由后端剥离，历史消息需手动清除
                             val cleanContent = msg.content?.replace(
-                                Regex("\\[PRODUCT:\\w+]"), ""
+                                Regex("\\[(PRODUCT|ADD_TO_CART|DELETE_FROM_CART|CLEAR_CART)[^\\]]*\\]"), ""
                             )?.trim() ?: ""
                             chatMsgs.add(ChatMessage.Ai(cleanContent))
                             // 收集该 AI 消息中引用的商品 ID
