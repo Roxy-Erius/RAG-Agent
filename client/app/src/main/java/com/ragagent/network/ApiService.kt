@@ -91,6 +91,23 @@ class ApiService {
     }
 
     /**
+     * 个性化推荐 — 分析用户历史对话，返回推荐商品。
+     */
+    suspend fun getRecommendations(): List<Product> = withContext(Dispatchers.IO) {
+        try {
+            val request = Request.Builder()
+                .url("$baseUrl/api/recommendations")
+                .build()
+            val response = client.newCall(request).execute()
+            if (response.isSuccessful) {
+                val json = response.body?.string() ?: "[]"
+                val type = com.google.gson.reflect.TypeToken.getParameterized(List::class.java, Product::class.java).type
+                gson.fromJson<List<Product>>(json, type)
+            } else emptyList()
+        } catch (e: Exception) { emptyList() }
+    }
+
+    /**
      * 清除会话历史。见 API 文档 2.3 节。
      */
     suspend fun clearSession(sessionId: String): Boolean = withContext(Dispatchers.IO) {

@@ -3,6 +3,8 @@ package com.ragagent.service;
 import com.ragagent.config.RagConfig;
 import com.ragagent.model.Conversation;
 import com.ragagent.model.ProductSearchResult;
+import com.ragagent.repository.ConversationRepository;
+import com.ragagent.repository.MessageRepository;
 import dev.langchain4j.data.message.AiMessage;
 import dev.langchain4j.data.message.ChatMessage;
 import dev.langchain4j.data.message.SystemMessage;
@@ -25,6 +27,7 @@ public class ChatService {
     private static final Logger log = LoggerFactory.getLogger(ChatService.class);
 
     private static final String SYSTEM_PROMPT_TEMPLATE = """
+            %s
             你是一个专业的电商导购助手。你的职责是根据用户需求，从商品库中推荐最合适的商品。
 
             ## 决策流程（先判断再行动）
@@ -107,19 +110,25 @@ public class ChatService {
     private final SessionService sessionService;
     private final ConversationService conversationService;
     private final CartService cartService;
+    private final ConversationRepository conversationRepository;
+    private final MessageRepository messageRepo;
 
     public ChatService(RagConfig ragConfig,
                        RetrieverService retrieverService,
                        OpenAiStreamingChatModel streamingChatModel,
                        SessionService sessionService,
                        ConversationService conversationService,
-                       CartService cartService) {
+                       CartService cartService,
+                       ConversationRepository conversationRepository,
+                       MessageRepository messageRepo) {
         this.ragConfig = ragConfig;
         this.retrieverService = retrieverService;
         this.streamingChatModel = streamingChatModel;
         this.sessionService = sessionService;
         this.conversationService = conversationService;
         this.cartService = cartService;
+        this.conversationRepository = conversationRepository;
+        this.messageRepo = messageRepo;
     }
 
     /**
@@ -144,7 +153,8 @@ public class ChatService {
             // ② Augmentation: 拼装上下文
             String context = formatProducts(products);
             String cartInfo = formatCart(sessionId, userId);
-            String systemPrompt = String.format(SYSTEM_PROMPT_TEMPLATE, cartInfo, context);
+            String userProfile = formatUserProfile(userId);
+            String systemPrompt = String.format(SYSTEM_PROMPT_TEMPLATE, userProfile, cartInfo, context);
 
             // ③ 构建消息列表: [system, history..., user]
             List<ChatMessage> messages = buildMessages(sessionId, systemPrompt, userMessage);
@@ -227,7 +237,8 @@ public class ChatService {
         List<ProductSearchResult> products = retrieverService.retrieveProductsByText(retrievalQuery, ragConfig.getTopK(), null);
         String context = formatProducts(products);
         String cartInfo = formatCart(sessionId, userId);
-        String systemPrompt = String.format(SYSTEM_PROMPT_TEMPLATE, cartInfo, context);
+        String userProfile = formatUserProfile(userId);
+        String systemPrompt = String.format(SYSTEM_PROMPT_TEMPLATE, userProfile, cartInfo, context);
         List<ChatMessage> messages = buildMessages(sessionId, systemPrompt, userMessage);
 
         Set<String> validIds = products.stream()
@@ -427,6 +438,41 @@ public class ChatService {
         } catch (Exception e) {
             log.warn("获取购物车失败: {}", e.getMessage());
             return "（暂时无法获取购物车信息）";
+        }
+    }
+
+    /** 分析用户历史消息，提取偏好品类，注入 System Prompt */
+    private String formatUserProfile(Long userId) {
+        if (userId == null) return "";
+        try {
+            var conversations = conversationRepository.findByUserId(userId);
+            if (conversations.isEmpty()) return "";
+            List<String> msgs = new ArrayList<>();
+            for (var conv : conversations) {
+                var messages = messageRepo.findByConversationId(conv.getId());
+                for (var msg : messages) {
+                    if ("user".equals(msg.getRole()) && msg.getContent() != null) {
+                        msgs.add(msg.getContent());
+                    }
+                }
+            }
+            if (msgs.isEmpty()) return "";
+            // Extract category keywords
+            java.util.Set<String> categories = new java.util.HashSet<>();
+            for (String msg : msgs) {
+                if (msg.contains("洁面") || msg.contains("洗面奶") || msg.contains("面霜")
+                    || msg.contains("精华") || msg.contains("护肤") || msg.contains("爽肤水")
+                    || msg.contains("眼霜") || msg.contains("面膜")) categories.add("美妆护肤");
+                if (msg.contains("耳机") || msg.contains("手机") || msg.contains("数码")
+                    || msg.contains("电脑") || msg.contains("平板") || msg.contains("智能")) categories.add("数码产品");
+                if (msg.contains("跑鞋") || msg.contains("运动") || msg.contains("T恤")
+                    || msg.contains("户外") || msg.contains("服饰") || msg.contains("衣服")) categories.add("运动户外");
+            }
+            if (categories.isEmpty()) return "";
+            return "## 用户偏好\n该用户之前关注过：" + String.join("、", categories) + "类商品，推荐时可优先考虑这些品类。\n\n";
+        } catch (Exception e) {
+            log.warn("获取用户偏好失败: {}", e.getMessage());
+            return "";
         }
     }
 

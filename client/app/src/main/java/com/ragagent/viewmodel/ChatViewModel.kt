@@ -37,6 +37,9 @@ class ChatViewModel : ViewModel() {
     private val _conversationTitle = MutableStateFlow<String?>(null)
     val conversationTitle: StateFlow<String?> = _conversationTitle.asStateFlow()
 
+    private val _recommendations = MutableStateFlow<List<Product>>(emptyList())
+    val recommendations: StateFlow<List<Product>> = _recommendations.asStateFlow()
+
     private var streamJob: Job? = null
 
     fun addToCart(productId: String, quantity: Int = 1) {
@@ -50,6 +53,8 @@ class ChatViewModel : ViewModel() {
 
     fun sendMessage(text: String) {
         if (text.isBlank() || _isStreaming.value) return
+
+        clearRecommendations()
 
         // 添加用户消息
         append(ChatMessage.User(text))
@@ -156,11 +161,13 @@ class ChatViewModel : ViewModel() {
         _isStreaming.value = false
         conversationId = null
         _conversationTitle.value = null
+        loadRecommendations()
     }
 
     /** 加载历史会话消息，并还原商品卡片 */
     fun loadConversation(cid: String, title: String?) {
         streamJob?.cancel()
+        clearRecommendations()
         _messages.value = emptyList()
         _isStreaming.value = false
         conversationId = cid
@@ -279,6 +286,18 @@ class ChatViewModel : ViewModel() {
             val items = apiService.getCart(sessionId)
             _cartCount.value = items.size
         }
+    }
+
+    fun loadRecommendations() {
+        if (!com.ragagent.auth.AuthManager.isLoggedIn()) return
+        viewModelScope.launch {
+            val products = apiService.getRecommendations()
+            _recommendations.value = products
+        }
+    }
+
+    fun clearRecommendations() {
+        _recommendations.value = emptyList()
     }
 
     fun clearSession() {
