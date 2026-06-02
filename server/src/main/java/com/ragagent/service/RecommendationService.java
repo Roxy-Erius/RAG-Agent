@@ -23,10 +23,10 @@ public class RecommendationService {
         Map.entry("洁面", "美妆护肤"), Map.entry("洗面奶", "美妆护肤"), Map.entry("面霜", "美妆护肤"),
         Map.entry("精华", "美妆护肤"), Map.entry("爽肤水", "美妆护肤"), Map.entry("眼霜", "美妆护肤"),
         Map.entry("护肤", "美妆护肤"), Map.entry("美妆", "美妆护肤"), Map.entry("面膜", "美妆护肤"),
-        Map.entry("耳机", "数码产品"), Map.entry("手机", "数码产品"), Map.entry("数码", "数码产品"),
-        Map.entry("电脑", "数码产品"), Map.entry("平板", "数码产品"), Map.entry("智能", "数码产品"),
-        Map.entry("跑鞋", "运动户外"), Map.entry("运动", "运动户外"), Map.entry("T恤", "运动户外"),
-        Map.entry("户外", "运动户外"), Map.entry("鞋", "运动户外"), Map.entry("服饰", "运动户外"),
+        Map.entry("耳机", "数码电子"), Map.entry("手机", "数码电子"), Map.entry("数码", "数码电子"),
+        Map.entry("电脑", "数码电子"), Map.entry("平板", "数码电子"), Map.entry("智能", "数码电子"),
+        Map.entry("跑鞋", "服饰运动"), Map.entry("运动", "服饰运动"), Map.entry("T恤", "服饰运动"),
+        Map.entry("户外", "服饰运动"), Map.entry("鞋", "服饰运动"), Map.entry("服饰", "服饰运动"),
         Map.entry("衣服", "运动户外")
     );
 

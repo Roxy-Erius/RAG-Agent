@@ -464,9 +464,9 @@ public class ChatService {
                     || msg.contains("精华") || msg.contains("护肤") || msg.contains("爽肤水")
                     || msg.contains("眼霜") || msg.contains("面膜")) categories.add("美妆护肤");
                 if (msg.contains("耳机") || msg.contains("手机") || msg.contains("数码")
-                    || msg.contains("电脑") || msg.contains("平板") || msg.contains("智能")) categories.add("数码产品");
+                    || msg.contains("电脑") || msg.contains("平板") || msg.contains("智能")) categories.add("数码电子");
                 if (msg.contains("跑鞋") || msg.contains("运动") || msg.contains("T恤")
-                    || msg.contains("户外") || msg.contains("服饰") || msg.contains("衣服")) categories.add("运动户外");
+                    || msg.contains("户外") || msg.contains("服饰") || msg.contains("衣服")) categories.add("服饰运动");
             }
             if (categories.isEmpty()) return "";
             return "## 用户偏好\n该用户之前关注过：" + String.join("、", categories) + "类商品，推荐时可优先考虑这些品类。\n\n";
