@@ -1,14 +1,15 @@
 package com.ragagent.ui
 
+import android.app.Dialog
 import android.os.Bundle
 import android.widget.Toast
 import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
 import androidx.lifecycle.lifecycleScope
 import androidx.recyclerview.widget.LinearLayoutManager
+import com.ragagent.R
 import com.ragagent.databinding.ActivityCartBinding
 import com.ragagent.network.ApiService
-import com.ragagent.network.ApiService.CartItemDto
 import kotlinx.coroutines.launch
 
 class CartActivity : AppCompatActivity() {
@@ -97,10 +98,15 @@ class CartActivity : AppCompatActivity() {
     }
 
     private fun checkout(itemIds: List<Long>) {
+        val loadingDialog = Dialog(this)
+        loadingDialog.setContentView(R.layout.dialog_loading)
+        loadingDialog.setCancelable(false)
+        loadingDialog.window?.setBackgroundDrawableResource(android.R.color.transparent)
+        loadingDialog.show()
+
         lifecycleScope.launch {
-            binding.btnCheckout.text = "支付中..."
-            binding.btnCheckout.isEnabled = false
             val result = apiService.checkout(sessionId, itemIds)
+            loadingDialog.dismiss()
             if (result != null) {
                 Toast.makeText(this@CartActivity, "支付成功！订单号: ${result.orderId}", Toast.LENGTH_LONG).show()
                 adapter.checkedIds.clear()
@@ -108,9 +114,6 @@ class CartActivity : AppCompatActivity() {
                 setResult(RESULT_OK)
             } else {
                 Toast.makeText(this@CartActivity, "支付失败，请重试", Toast.LENGTH_SHORT).show()
-                binding.btnCheckout.text = "去结算"
-                binding.btnCheckout.isEnabled = true
-                binding.btnCheckout.alpha = 1.0f
             }
         }
     }
