@@ -1,0 +1,38 @@
+server:
+  port: 8080
+
+spring:
+  application:
+    name: rag-server
+  datasource:
+    url: jdbc:mysql://服务器IP:3306/rag_agent?useUnicode=true&characterEncoding=utf-8&serverTimezone=Asia/Shanghai
+    username: rag_agent
+    password: 你的MySQL密码
+    driver-class-name: com.mysql.cj.jdbc.Driver
+
+# ==================== ChromaDB 配置 ====================
+chromadb:
+  url: http://服务器IP:8000
+  collection-name: products
+
+# ==================== 火山引擎 API 配置 ====================
+volcengine:
+  base-url: https://ark.cn-beijing.volces.com/api/v3
+  # Chat 模型
+  chat:
+    api-key: 你的chat模型API_KEY
+    model-id: 你的chat模型endpoint-id
+  # Embedding 模型
+  embedding:
+    api-key: 你的embedding模型API_KEY
+    model: doubao-embedding-vision-251215
+
+# ==================== RAG 参数 ====================
+rag:
+  top-k: 3
+  similarity-threshold: 0.5
+  max-context-messages: 10
+
+# ==================== 数据集路径 ====================
+dataset:
+  path: ../ecommerce_agent_dataset

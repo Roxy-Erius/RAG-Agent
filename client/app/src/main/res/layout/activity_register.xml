@@ -1,0 +1,48 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:orientation="vertical"
+    android:background="@color/background"
+    android:gravity="center_horizontal"
+    android:padding="32dp">
+
+    <LinearLayout android:layout_width="match_parent"
+        android:layout_height="wrap_content" android:gravity="center_vertical"
+        android:layout_marginBottom="32dp">
+        <ImageButton android:id="@+id/btnBack" android:layout_width="40dp"
+            android:layout_height="40dp" android:background="?attr/selectableItemBackgroundBorderless"
+            android:src="@drawable/ic_back" android:scaleType="centerInside" />
+        <TextView android:layout_width="0dp" android:layout_height="wrap_content"
+            android:layout_weight="1" android:text="创建账号"
+            android:textColor="@color/text_primary" android:textSize="18sp" android:textStyle="bold" />
+    </LinearLayout>
+
+    <EditText android:id="@+id/etUsername" android:layout_width="match_parent"
+        android:layout_height="50dp" android:hint="用户名" android:textColorHint="#C4B8A8"
+        android:textColor="@color/text_primary" android:background="@drawable/bg_input_capsule"
+        android:inputType="text" android:paddingHorizontal="16dp" android:elevation="2dp"
+        android:layout_marginBottom="12dp" android:importantForAutofill="no" />
+
+    <EditText android:id="@+id/etPassword" android:layout_width="match_parent"
+        android:layout_height="50dp" android:hint="密码（至少6位）" android:textColorHint="#C4B8A8"
+        android:textColor="@color/text_primary" android:background="@drawable/bg_input_capsule"
+        android:inputType="textPassword" android:paddingHorizontal="16dp" android:elevation="2dp"
+        android:layout_marginBottom="12dp" android:importantForAutofill="no" />
+
+    <EditText android:id="@+id/etPasswordConfirm" android:layout_width="match_parent"
+        android:layout_height="50dp" android:hint="确认密码" android:textColorHint="#C4B8A8"
+        android:textColor="@color/text_primary" android:background="@drawable/bg_input_capsule"
+        android:inputType="textPassword" android:paddingHorizontal="16dp" android:elevation="2dp"
+        android:importantForAutofill="no" />
+
+    <TextView android:id="@+id/tvError" android:layout_width="wrap_content"
+        android:layout_height="wrap_content" android:textColor="@color/accent"
+        android:textSize="12sp" android:layout_marginTop="8dp" android:visibility="gone" />
+
+    <TextView android:id="@+id/btnRegister" android:layout_width="match_parent"
+        android:layout_height="50dp" android:text="注 册" android:textColor="#FFFFFF"
+        android:textSize="16sp" android:textStyle="bold" android:gravity="center"
+        android:background="@drawable/bg_auth_button" android:layout_marginTop="16dp"
+        android:elevation="3dp" android:clickable="true" android:focusable="true" />
+</LinearLayout>
