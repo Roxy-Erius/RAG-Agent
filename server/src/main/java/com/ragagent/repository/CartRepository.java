@@ -187,4 +187,18 @@ public class CartRepository {
                     userId, productId, quantity);
         }
     }
+
+    public int deleteByIds(List<Long> ids, String sessionId) {
+        if (ids == null || ids.isEmpty()) return 0;
+        String placeholders = ids.stream().map(id -> "?").collect(java.util.stream.Collectors.joining(","));
+        return jdbc.update("DELETE FROM cart_items WHERE id IN (" + placeholders + ") AND session_id = ?",
+                java.util.stream.Stream.concat(ids.stream(), java.util.stream.Stream.of(sessionId)).toArray());
+    }
+
+    public int deleteByIdsForUser(List<Long> ids, Long userId) {
+        if (ids == null || ids.isEmpty()) return 0;
+        String placeholders = ids.stream().map(id -> "?").collect(java.util.stream.Collectors.joining(","));
+        return jdbc.update("DELETE FROM cart_items WHERE id IN (" + placeholders + ") AND user_id = ?",
+                java.util.stream.Stream.concat(ids.stream(), java.util.stream.Stream.of(userId)).toArray());
+    }
 }

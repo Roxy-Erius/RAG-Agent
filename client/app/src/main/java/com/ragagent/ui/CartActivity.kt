@@ -2,6 +2,7 @@ package com.ragagent.ui
 
 import android.os.Bundle
 import android.widget.Toast
+import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
 import androidx.lifecycle.lifecycleScope
 import androidx.recyclerview.widget.LinearLayoutManager
@@ -15,9 +16,11 @@ class CartActivity : AppCompatActivity() {
     private lateinit var binding: ActivityCartBinding
     private val apiService = ApiService()
     private lateinit var sessionId: String
+
     private val adapter = CartAdapter(
         onQuantityChange = { id, qty -> updateQuantity(id, qty) },
-        onDelete = { id -> deleteItem(id) }
+        onDelete = { id -> deleteItem(id) },
+        onCheckedChange = { updateTotal() }
     )
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -31,8 +34,26 @@ class CartActivity : AppCompatActivity() {
         binding.recyclerCart.adapter = adapter
 
         binding.btnBack.setOnClickListener { finish() }
+
+        binding.cbSelectAll.setOnCheckedChangeListener { _, isChecked ->
+            adapter.setAllChecked(isChecked)
+            binding.cbSelectAll.isChecked = adapter.isAllChecked()
+        }
+
         binding.btnCheckout.setOnClickListener {
-            Toast.makeText(this, "下单功能开发中", Toast.LENGTH_SHORT).show()
+            val checkedIds = adapter.getCheckedIds()
+            if (checkedIds.isEmpty()) {
+                Toast.makeText(this, "请先选择商品", Toast.LENGTH_SHORT).show()
+                return@setOnClickListener
+            }
+            val total = adapter.getCheckedTotal()
+            val count = adapter.getCheckedCount()
+            AlertDialog.Builder(this)
+                .setTitle("确认支付")
+                .setMessage("共 ${count} 件商品，合计 ¥%.2f".format(total))
+                .setPositiveButton("确认支付") { _, _ -> checkout(checkedIds) }
+                .setNegativeButton("取消", null)
+                .show()
         }
 
         loadCart()
@@ -47,7 +68,8 @@ class CartActivity : AppCompatActivity() {
         lifecycleScope.launch {
             val items = apiService.getCart(sessionId)
             adapter.submitList(items)
-            updateTotal(items)
+            updateTotal()
+            binding.cbSelectAll.isChecked = adapter.isAllChecked()
         }
     }
 
@@ -61,12 +83,35 @@ class CartActivity : AppCompatActivity() {
     private fun deleteItem(id: Long) {
         lifecycleScope.launch {
             apiService.removeFromCart(id, sessionId)
+            adapter.checkedIds.remove(id)
             loadCart()
         }
     }
 
-    private fun updateTotal(items: List<CartItemDto>) {
-        val total = items.sumOf { (it.productPrice ?: 0.0) * it.quantity }
+    private fun updateTotal() {
+        val total = adapter.getCheckedTotal()
         binding.tvTotal.text = "合计: ¥%.2f".format(total)
+        val count = adapter.getCheckedCount()
+        binding.btnCheckout.isEnabled = count > 0
+        binding.btnCheckout.alpha = if (count > 0) 1.0f else 0.5f
+    }
+
+    private fun checkout(itemIds: List<Long>) {
+        lifecycleScope.launch {
+            binding.btnCheckout.text = "支付中..."
+            binding.btnCheckout.isEnabled = false
+            val result = apiService.checkout(sessionId, itemIds)
+            if (result != null) {
+                Toast.makeText(this@CartActivity, "支付成功！订单号: ${result.orderId}", Toast.LENGTH_LONG).show()
+                adapter.checkedIds.clear()
+                loadCart()
+                setResult(RESULT_OK)
+            } else {
+                Toast.makeText(this@CartActivity, "支付失败，请重试", Toast.LENGTH_SHORT).show()
+                binding.btnCheckout.text = "去结算"
+                binding.btnCheckout.isEnabled = true
+                binding.btnCheckout.alpha = 1.0f
+            }
+        }
     }
 }

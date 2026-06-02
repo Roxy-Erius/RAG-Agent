@@ -182,6 +182,24 @@ class ApiService {
         } catch (e: Exception) { emptyList() }
     }
 
+    // ========== 订单 / 结算 ==========
+
+    data class CheckoutResult(val orderId: String, val total: Double, val itemCount: Int, val status: String)
+
+    suspend fun checkout(sessionId: String, itemIds: List<Long>): CheckoutResult? = withContext(Dispatchers.IO) {
+        try {
+            val json = gson.toJson(mapOf("sessionId" to sessionId, "itemIds" to itemIds))
+            val request = Request.Builder()
+                .url("$baseUrl/api/orders/checkout")
+                .post(okhttp3.RequestBody.create("application/json".toMediaType(), json))
+                .build()
+            val response = client.newCall(request).execute()
+            if (response.isSuccessful) {
+                response.body?.string()?.let { gson.fromJson(it, CheckoutResult::class.java) }
+            } else null
+        } catch (e: Exception) { null }
+    }
+
     // ========== 用户认证 ==========
 
     data class LoginResponse(val token: String, val username: String)
