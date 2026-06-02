@@ -95,7 +95,10 @@ class MainActivity : AppCompatActivity() {
                     binding.tvRecommendTitle.visibility = View.VISIBLE
                     binding.recyclerRecommendations.visibility = View.VISIBLE
                     binding.recyclerRecommendations.adapter = ProductRecommendAdapter(products) { product ->
-                        viewModel.sendMessage("推荐${product.title}")
+                        val intent = Intent(this@MainActivity, ProductCardActivity::class.java).apply {
+                            putExtra(ProductCardActivity.EXTRA_PRODUCT_ID, product.productId)
+                        }
+                        startActivity(intent)
                     }
                 } else {
                     binding.tvRecommendTitle.visibility = View.GONE
@@ -161,9 +164,9 @@ class MainActivity : AppCompatActivity() {
         override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): ViewHolder {
             val card = CardView(parent.context).apply {
                 layoutParams = ViewGroup.MarginLayoutParams(
-                    140.dpToPx(),
+                    180.dpToPx(),
                     ViewGroup.LayoutParams.WRAP_CONTENT
-                ).apply { marginEnd = 10.dpToPx() }
+                ).apply { marginEnd = 12.dpToPx() }
                 radius = 14.dpToPx().toFloat()
                 cardElevation = 3.dpToPx().toFloat()
                 setCardBackgroundColor(Color.parseColor("#FFFFFF"))
@@ -178,7 +181,7 @@ class MainActivity : AppCompatActivity() {
 
             val image = ImageView(parent.context).apply {
                 layoutParams = LinearLayout.LayoutParams(
-                    ViewGroup.LayoutParams.MATCH_PARENT, 100.dpToPx())
+                    ViewGroup.LayoutParams.MATCH_PARENT, 120.dpToPx())
                 scaleType = ImageView.ScaleType.CENTER_CROP
                 setBackgroundColor(Color.parseColor("#F5EFE5"))
                 id = View.generateViewId()
