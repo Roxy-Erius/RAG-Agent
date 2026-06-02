@@ -42,6 +42,7 @@ class MainActivity : AppCompatActivity() {
             onProductClick = { product ->
                 val intent = Intent(this, ProductCardActivity::class.java).apply {
                     putExtra(ProductCardActivity.EXTRA_PRODUCT_ID, product.productId)
+                    putExtra(ProductCardActivity.EXTRA_SESSION_ID, viewModel.sessionId)
                 }
                 startActivity(intent)
             },
@@ -97,6 +98,7 @@ class MainActivity : AppCompatActivity() {
                     binding.recyclerRecommendations.adapter = ProductRecommendAdapter(products) { product ->
                         val intent = Intent(this@MainActivity, ProductCardActivity::class.java).apply {
                             putExtra(ProductCardActivity.EXTRA_PRODUCT_ID, product.productId)
+                            putExtra(ProductCardActivity.EXTRA_SESSION_ID, viewModel.sessionId)
                         }
                         startActivity(intent)
                     }
