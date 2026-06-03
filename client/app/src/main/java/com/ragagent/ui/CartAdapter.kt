@@ -40,6 +40,14 @@ class CartAdapter(
 
     fun getCheckedCount(): Int = checkedIds.size
 
+    /**
+     * 获取指定购物车项ID对应的商品ID列表。
+     */
+    fun getProductIds(cartItemIds: List<Long>): List<String> {
+        val idSet = cartItemIds.toSet()
+        return items.filter { idSet.contains(it.id) }.map { it.productId }
+    }
+
     override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): ViewHolder {
         val binding = ItemCartProductBinding.inflate(
             LayoutInflater.from(parent.context), parent, false)

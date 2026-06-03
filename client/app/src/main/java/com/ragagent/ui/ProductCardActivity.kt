@@ -48,6 +48,9 @@ class ProductCardActivity : AppCompatActivity() {
                         .load(product.imagePath)
                         .into(binding.ivProduct)
                 }
+
+                // V3: 记录浏览行为
+                apiService.recordBehavior(productId, "VIEW")
             }
         }
 
@@ -62,6 +65,8 @@ class ProductCardActivity : AppCompatActivity() {
             lifecycleScope.launch {
                 apiService.addToCart(sessionId, product.productId)
                 Toast.makeText(this@ProductCardActivity, "✅ 已加入购物车", Toast.LENGTH_SHORT).show()
+                // V3: 记录加购行为
+                apiService.recordBehavior(product.productId, "CART")
             }
         }
 

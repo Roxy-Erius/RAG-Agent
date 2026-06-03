@@ -322,4 +322,23 @@ class ApiService {
                 client.newCall(request).execute().isSuccessful
             } catch (e: Exception) { false }
         }
+
+    // ========== 用户行为追踪 API ==========
+
+    /**
+     * 记录用户行为（浏览、加购、购买），用于 V3 个性化推荐。
+     * 非关键功能，失败时静默忽略。
+     */
+    suspend fun recordBehavior(productId: String, actionType: String) {
+        withContext(Dispatchers.IO) {
+            try {
+                val json = gson.toJson(mapOf("productId" to productId, "actionType" to actionType))
+                val request = Request.Builder()
+                    .url("$baseUrl/api/behaviors")
+                    .post(okhttp3.RequestBody.create("application/json".toMediaType(), json))
+                    .build()
+                client.newCall(request).execute()
+            } catch (e: Exception) { /* silent, non-critical */ }
+        }
+    }
 }

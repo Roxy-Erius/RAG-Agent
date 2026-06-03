@@ -109,6 +109,10 @@ class CartActivity : AppCompatActivity() {
             loadingDialog.dismiss()
             if (result != null) {
                 Toast.makeText(this@CartActivity, "支付成功！订单号: ${result.orderId}", Toast.LENGTH_LONG).show()
+                // V3: 记录购买行为
+                for (pid in adapter.getProductIds(itemIds)) {
+                    apiService.recordBehavior(pid, "PURCHASE")
+                }
                 adapter.checkedIds.clear()
                 loadCart()
                 setResult(RESULT_OK)
