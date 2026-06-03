@@ -90,18 +90,21 @@ class MainActivity : AppCompatActivity() {
         }
 
         // 观察个性化推荐
+        val recommendAdapter = ProductRecommendAdapter { product ->
+            val intent = Intent(this@MainActivity, ProductCardActivity::class.java).apply {
+                putExtra(ProductCardActivity.EXTRA_PRODUCT_ID, product.productId)
+                putExtra(ProductCardActivity.EXTRA_SESSION_ID, viewModel.sessionId)
+            }
+            startActivity(intent)
+        }
+        binding.recyclerRecommendations.adapter = recommendAdapter
+
         lifecycleScope.launch {
             viewModel.recommendations.collect { products ->
                 if (products.isNotEmpty()) {
                     binding.tvRecommendTitle.visibility = View.VISIBLE
                     binding.recyclerRecommendations.visibility = View.VISIBLE
-                    binding.recyclerRecommendations.adapter = ProductRecommendAdapter(products) { product ->
-                        val intent = Intent(this@MainActivity, ProductCardActivity::class.java).apply {
-                            putExtra(ProductCardActivity.EXTRA_PRODUCT_ID, product.productId)
-                            putExtra(ProductCardActivity.EXTRA_SESSION_ID, viewModel.sessionId)
-                        }
-                        startActivity(intent)
-                    }
+                    recommendAdapter.updateProducts(products)
                 } else {
                     binding.tvRecommendTitle.visibility = View.GONE
                     binding.recyclerRecommendations.visibility = View.GONE
@@ -157,9 +160,15 @@ class MainActivity : AppCompatActivity() {
 
     /** 个性化推荐横向卡片适配器 */
     inner class ProductRecommendAdapter(
-        private val products: List<Product>,
         private val onClick: (Product) -> Unit
     ) : RecyclerView.Adapter<ProductRecommendAdapter.ViewHolder>() {
+
+        private var products: List<Product> = emptyList()
+
+        fun updateProducts(list: List<Product>) {
+            products = list
+            notifyDataSetChanged()
+        }
 
         inner class ViewHolder(val card: CardView) : RecyclerView.ViewHolder(card)
 
