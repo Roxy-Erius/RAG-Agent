@@ -93,15 +93,29 @@ public class RecommendationService {
         // V3: 构建带时间衰减行为的加权查询
         try {
             List<UserBehavior> behaviors = behaviorRepo.findByUserId(userId);
+            // 收集已购买的商品 ID（用于过滤）
+            final Set<String> purchasedIds = behaviors.stream()
+                    .filter(b -> "PURCHASE".equals(b.getActionType()))
+                    .map(UserBehavior::getProductId)
+                    .collect(Collectors.toSet());
+
             if (!behaviors.isEmpty()) {
                 String weightedQuery = buildWeightedQuery(baseQuery, behaviors);
-                log.info("V3 加权查询 | userId={} | 行为数={} | queryLen={}",
-                        userId, behaviors.size(), weightedQuery.length());
-                List<ProductSearchResult> results = retrieverService.retrieveProductsByText(weightedQuery, 3, null);
+                log.info("V3 加权查询 | userId={} | 行为数={} | 已购数={} | queryLen={}",
+                        userId, behaviors.size(), purchasedIds.size(), weightedQuery.length());
+                // 多取一些，过滤已购后仍有足够候选
+                List<ProductSearchResult> results = retrieverService.retrieveProductsByText(weightedQuery, 6, null);
                 if (!results.isEmpty()) {
-                    List<String> ids = results.stream().map(ProductSearchResult::getProductId).toList();
-                    log.info("V3 推荐结果 | ids={}", ids);
-                    return productRepo.findByIds(ids);
+                    // 过滤掉已购买的商品
+                    List<String> ids = results.stream()
+                            .map(ProductSearchResult::getProductId)
+                            .filter(id -> !purchasedIds.contains(id))
+                            .limit(3)
+                            .toList();
+                    if (!ids.isEmpty()) {
+                        log.info("V3 推荐结果（已过滤已购） | ids={}", ids);
+                        return productRepo.findByIds(ids);
+                    }
                 }
                 log.info("V3 无结果，降级到 V2");
             } else {
@@ -109,11 +123,17 @@ public class RecommendationService {
             }
 
             // V2: 纯语义推荐（无行为数据或 V3 无结果时）
-            List<ProductSearchResult> results = retrieverService.retrieveProductsByText(baseQuery, 3, null);
+            List<ProductSearchResult> results = retrieverService.retrieveProductsByText(baseQuery, 6, null);
             if (!results.isEmpty()) {
-                List<String> ids = results.stream().map(ProductSearchResult::getProductId).toList();
-                log.info("V2 推荐结果 | ids={}", ids);
-                return productRepo.findByIds(ids);
+                List<String> ids = results.stream()
+                        .map(ProductSearchResult::getProductId)
+                        .filter(id -> !purchasedIds.contains(id))
+                        .limit(3)
+                        .toList();
+                if (!ids.isEmpty()) {
+                    log.info("V2 推荐结果（已过滤已购）| ids={}", ids);
+                    return productRepo.findByIds(ids);
+                }
             }
         } catch (Exception e) {
             log.warn("V3/V2 语义推荐失败，降级到 V1: {}", e.getMessage());
