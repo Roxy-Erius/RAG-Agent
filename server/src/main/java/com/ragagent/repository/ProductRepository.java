@@ -6,6 +6,7 @@ import org.springframework.jdbc.core.RowMapper;
 import org.springframework.stereotype.Repository;
 
 import java.util.List;
+import java.util.Map;
 
 @Repository
 public class ProductRepository {
@@ -45,5 +46,23 @@ public class ProductRepository {
 
     public List<Product> findAll() {
         return jdbc.query("SELECT * FROM products", ROW_MAPPER);
+    }
+
+    public List<Map<String, Object>> findSkusByProductId(String productId) {
+        return jdbc.queryForList(
+                "SELECT sku_id, product_id, properties, price, stock FROM product_skus WHERE product_id = ?",
+                productId);
+    }
+
+    public List<Map<String, Object>> findReviewsByProductId(String productId) {
+        return jdbc.queryForList(
+                "SELECT id, product_id, user_id, nickname, rating, content, created_at FROM product_reviews WHERE product_id = ? ORDER BY created_at DESC",
+                productId);
+    }
+
+    public List<Map<String, Object>> findFaqsByProductId(String productId) {
+        return jdbc.queryForList(
+                "SELECT id, product_id, question, answer, created_at FROM product_faqs WHERE product_id = ? ORDER BY created_at ASC",
+                productId);
     }
 }

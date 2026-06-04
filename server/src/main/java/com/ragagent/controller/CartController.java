@@ -28,16 +28,18 @@ public class CartController {
     public ResponseEntity<CartItem> add(
             @RequestParam String sessionId,
             @RequestParam String productId,
+            @RequestParam(required = false) String skuId,
+            @RequestParam(required = false) String skuLabel,
             @RequestParam(defaultValue = "1") int quantity,
             HttpServletRequest request) {
         Long userId = jwtAuthFilter.getUserId(request);
-        log.info("==> POST /api/cart/add | sessionId={} | userId={} | productId={} | quantity={}",
-                sessionId, userId, productId, quantity);
+        log.info("==> POST /api/cart/add | sessionId={} | userId={} | productId={} | skuId={} | skuLabel={} | quantity={}",
+                sessionId, userId, productId, skuId, skuLabel, quantity);
         CartItem item;
         if (userId != null) {
-            item = cartService.addToCart(sessionId, userId, productId, quantity);
+            item = cartService.addToCart(sessionId, userId, productId, skuId, skuLabel, quantity);
         } else {
-            item = cartService.addToCart(sessionId, productId, quantity);
+            item = cartService.addToCart(sessionId, productId, skuId, skuLabel, quantity);
         }
         return ResponseEntity.ok(item);
     }

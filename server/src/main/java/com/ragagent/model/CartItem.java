@@ -6,6 +6,8 @@ public class CartItem {
     private Long id;
     private String sessionId;
     private String productId;
+    private String skuId;
+    private String skuLabel;
     private int quantity;
     private LocalDateTime createdAt;
     private String productTitle;
@@ -21,6 +23,10 @@ public class CartItem {
     public void setSessionId(String sessionId) { this.sessionId = sessionId; }
     public String getProductId() { return productId; }
     public void setProductId(String productId) { this.productId = productId; }
+    public String getSkuId() { return skuId; }
+    public void setSkuId(String skuId) { this.skuId = skuId; }
+    public String getSkuLabel() { return skuLabel; }
+    public void setSkuLabel(String skuLabel) { this.skuLabel = skuLabel; }
     public int getQuantity() { return quantity; }
     public void setQuantity(int quantity) { this.quantity = quantity; }
     public LocalDateTime getCreatedAt() { return createdAt; }

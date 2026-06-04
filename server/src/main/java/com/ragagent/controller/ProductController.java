@@ -10,6 +10,7 @@ import org.springframework.web.bind.annotation.*;
 
 import java.util.Arrays;
 import java.util.List;
+import java.util.Map;
 
 @RestController
 @RequestMapping("/api/products")
@@ -57,5 +58,23 @@ public class ProductController {
         log.info("<== 语义搜索结果 | query=\"{}\" | found={}", query, productIds.size());
         List<Product> products = productRepository.findByIds(productIds);
         return ResponseEntity.ok(products);
+    }
+
+    @GetMapping("/{id}/skus")
+    public ResponseEntity<List<Map<String, Object>>> getSkus(@PathVariable String id) {
+        log.debug("GET /api/products/{}/skus", id);
+        return ResponseEntity.ok(productRepository.findSkusByProductId(id));
+    }
+
+    @GetMapping("/{id}/reviews")
+    public ResponseEntity<List<Map<String, Object>>> getReviews(@PathVariable String id) {
+        log.debug("GET /api/products/{}/reviews", id);
+        return ResponseEntity.ok(productRepository.findReviewsByProductId(id));
+    }
+
+    @GetMapping("/{id}/faqs")
+    public ResponseEntity<List<Map<String, Object>>> getFaqs(@PathVariable String id) {
+        log.debug("GET /api/products/{}/faqs", id);
+        return ResponseEntity.ok(productRepository.findFaqsByProductId(id));
     }
 }

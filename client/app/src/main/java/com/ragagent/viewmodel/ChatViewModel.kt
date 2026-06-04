@@ -44,7 +44,7 @@ class ChatViewModel : ViewModel() {
 
     fun addToCart(productId: String, quantity: Int = 1) {
         viewModelScope.launch {
-            val item = apiService.addToCart(sessionId, productId, quantity)
+            val item = apiService.addToCart(sessionId, productId, null, null, quantity)
             if (item != null) {
                 _cartCount.value = _cartCount.value + quantity
             }

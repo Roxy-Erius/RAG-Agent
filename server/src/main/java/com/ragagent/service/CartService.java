@@ -18,9 +18,9 @@ public class CartService {
         this.cartRepository = cartRepository;
     }
 
-    public CartItem addToCart(String sessionId, String productId, int quantity) {
-        log.info("加购 | sessionId={} | productId={} | quantity={}", sessionId, productId, quantity);
-        return cartRepository.add(sessionId, productId, quantity);
+    public CartItem addToCart(String sessionId, String productId, String skuId, String skuLabel, int quantity) {
+        log.info("加购 | sessionId={} | productId={} | skuId={} | skuLabel={} | quantity={}", sessionId, productId, skuId, skuLabel, quantity);
+        return cartRepository.add(sessionId, productId, skuId, skuLabel, quantity);
     }
 
     public boolean removeFromCart(Long id, String sessionId) {
@@ -43,9 +43,9 @@ public class CartService {
         cartRepository.migrateSessionToUser(sessionId, userId);
     }
 
-    public CartItem addToCart(String sessionId, Long userId, String productId, int quantity) {
-        log.info("加购(user) | userId={} | productId={} | quantity={}", userId, productId, quantity);
-        return cartRepository.add(sessionId, userId, productId, quantity);
+    public CartItem addToCart(String sessionId, Long userId, String productId, String skuId, String skuLabel, int quantity) {
+        log.info("加购(user) | userId={} | productId={} | skuId={} | skuLabel={} | quantity={}", userId, productId, skuId, skuLabel, quantity);
+        return cartRepository.add(sessionId, userId, productId, skuId, skuLabel, quantity);
     }
 
     public boolean removeFromCart(Long id, Long userId) {

@@ -21,6 +21,8 @@ public class CartRepository {
         item.setId(rs.getLong("id"));
         item.setSessionId(rs.getString("session_id"));
         item.setProductId(rs.getString("product_id"));
+        item.setSkuId(rs.getString("sku_id"));
+        item.setSkuLabel(rs.getString("sku_label"));
         item.setQuantity(rs.getInt("quantity"));
         item.setCreatedAt(rs.getTimestamp("created_at") != null
                 ? rs.getTimestamp("created_at").toLocalDateTime() : null);
@@ -36,6 +38,8 @@ public class CartRepository {
         item.setId(rs.getLong("id"));
         item.setSessionId(rs.getString("session_id"));
         item.setProductId(rs.getString("product_id"));
+        item.setSkuId(rs.getString("sku_id"));
+        item.setSkuLabel(rs.getString("sku_label"));
         item.setQuantity(rs.getInt("quantity"));
         item.setCreatedAt(rs.getTimestamp("created_at") != null
                 ? rs.getTimestamp("created_at").toLocalDateTime() : null);
@@ -46,10 +50,10 @@ public class CartRepository {
         this.jdbc = jdbc;
     }
 
-    public CartItem add(String sessionId, String productId, int quantity) {
+    public CartItem add(String sessionId, String productId, String skuId, String skuLabel, int quantity) {
         List<CartItem> existing = jdbc.query(
-                "SELECT * FROM cart_items WHERE session_id = ? AND product_id = ?",
-                PLAIN_MAPPER, sessionId, productId);
+                "SELECT * FROM cart_items WHERE session_id = ? AND product_id = ? AND ((sku_id = ?) OR (sku_id IS NULL AND ? IS NULL))",
+                PLAIN_MAPPER, sessionId, productId, skuId, skuId);
         if (!existing.isEmpty()) {
             CartItem item = existing.get(0);
             jdbc.update("UPDATE cart_items SET quantity = quantity + ? WHERE id = ?",
@@ -60,17 +64,21 @@ public class CartRepository {
         KeyHolder keyHolder = new GeneratedKeyHolder();
         jdbc.update(con -> {
             PreparedStatement ps = con.prepareStatement(
-                    "INSERT INTO cart_items (session_id, product_id, quantity) VALUES (?, ?, ?)",
+                    "INSERT INTO cart_items (session_id, product_id, sku_id, sku_label, quantity) VALUES (?, ?, ?, ?, ?)",
                     Statement.RETURN_GENERATED_KEYS);
             ps.setString(1, sessionId);
             ps.setString(2, productId);
-            ps.setInt(3, quantity);
+            ps.setString(3, skuId);
+            ps.setString(4, skuLabel);
+            ps.setInt(5, quantity);
             return ps;
         }, keyHolder);
         CartItem item = new CartItem();
         item.setId(keyHolder.getKey().longValue());
         item.setSessionId(sessionId);
         item.setProductId(productId);
+        item.setSkuId(skuId);
+        item.setSkuLabel(skuLabel);
         item.setQuantity(quantity);
         return item;
     }
@@ -94,16 +102,17 @@ public class CartRepository {
 
     public List<CartItem> findBySessionId(String sessionId) {
         return jdbc.query(
-                "SELECT c.*, p.title, p.brand, p.base_price, p.image_path " +
+                "SELECT c.*, p.title, p.brand, COALESCE(s.price, p.base_price) AS base_price, p.image_path " +
                 "FROM cart_items c LEFT JOIN products p ON c.product_id = p.product_id " +
+                "LEFT JOIN product_skus s ON c.sku_id = s.sku_id " +
                 "WHERE c.session_id = ? ORDER BY c.created_at DESC",
                 ROW_MAPPER, sessionId);
     }
 
-    public CartItem add(String sessionId, Long userId, String productId, int quantity) {
+    public CartItem add(String sessionId, Long userId, String productId, String skuId, String skuLabel, int quantity) {
         List<CartItem> existing = jdbc.query(
-                "SELECT * FROM cart_items WHERE user_id = ? AND product_id = ?",
-                PLAIN_MAPPER, userId, productId);
+                "SELECT * FROM cart_items WHERE user_id = ? AND product_id = ? AND ((sku_id = ?) OR (sku_id IS NULL AND ? IS NULL))",
+                PLAIN_MAPPER, userId, productId, skuId, skuId);
         if (!existing.isEmpty()) {
             CartItem item = existing.get(0);
             jdbc.update("UPDATE cart_items SET quantity = quantity + ? WHERE id = ?",
@@ -114,18 +123,22 @@ public class CartRepository {
         KeyHolder keyHolder = new GeneratedKeyHolder();
         jdbc.update(con -> {
             PreparedStatement ps = con.prepareStatement(
-                    "INSERT INTO cart_items (session_id, user_id, product_id, quantity) VALUES (?, ?, ?, ?)",
+                    "INSERT INTO cart_items (session_id, user_id, product_id, sku_id, sku_label, quantity) VALUES (?, ?, ?, ?, ?, ?)",
                     Statement.RETURN_GENERATED_KEYS);
             ps.setString(1, sessionId);
             ps.setLong(2, userId);
             ps.setString(3, productId);
-            ps.setInt(4, quantity);
+            ps.setString(4, skuId);
+            ps.setString(5, skuLabel);
+            ps.setInt(6, quantity);
             return ps;
         }, keyHolder);
         CartItem item = new CartItem();
         item.setId(keyHolder.getKey().longValue());
         item.setSessionId(sessionId);
         item.setProductId(productId);
+        item.setSkuId(skuId);
+        item.setSkuLabel(skuLabel);
         item.setQuantity(quantity);
         return item;
     }
@@ -149,8 +162,9 @@ public class CartRepository {
 
     public List<CartItem> findByUserId(Long userId) {
         return jdbc.query(
-                "SELECT c.*, p.title, p.brand, p.base_price, p.image_path " +
+                "SELECT c.*, p.title, p.brand, COALESCE(s.price, p.base_price) AS base_price, p.image_path " +
                 "FROM cart_items c LEFT JOIN products p ON c.product_id = p.product_id " +
+                "LEFT JOIN product_skus s ON c.sku_id = s.sku_id " +
                 "WHERE c.user_id = ? ORDER BY c.created_at DESC",
                 ROW_MAPPER, userId);
     }
