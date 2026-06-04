@@ -71,18 +71,14 @@ class ProductCardActivity : AppCompatActivity() {
         }
 
         binding.btnBuyNow.setOnClickListener {
-            val product = currentProduct ?: return@setOnClickListener
             if (!AuthManager.isLoggedIn()) {
                 showLoginDialog()
                 return@setOnClickListener
             }
-            lifecycleScope.launch {
-                apiService.addToCart(sessionId, product.productId)
-                val intent = Intent(this@ProductCardActivity, CartActivity::class.java).apply {
-                    putExtra("sessionId", sessionId)
-                }
-                startActivity(intent)
+            val intent = Intent(this@ProductCardActivity, CartActivity::class.java).apply {
+                putExtra("sessionId", sessionId)
             }
+            startActivity(intent)
         }
     }
 
