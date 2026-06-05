@@ -1,6 +1,97 @@
-# Day 12 — 个性化推荐、商品详情页补全与购物车优化
+# Day 12 — 对话驱动购物车、测试验证、个性化推荐与商品详情页补全
 
-## 一、个性化推荐 V1–V3
+## 一、对话驱动购物车（ADD_TO_CART 标签）
+
+### 设计决策
+
+| 决策 | 选择 | 理由 |
+|---|---|---|
+| 加购触发方式 | LLM 输出 `[ADD_TO_CART:id]` 标签 | SSE 流中实时检测，无需额外 API 调用 |
+| 数量支持 | `[ADD_TO_CART:id:N]` 设数量 / `[:+N]` 加数量 | 灵活支持"加 3 件"、"再来 2 件" |
+| 模式区分 | set 模式（替换）vs add 模式（叠加） | set 适合"买 3 件"，add 适合"再买 2 件" |
+| 多商品冲突 | AI 先确认再操作 | 避免用户说要 A 但 AI 加了 B |
+| 标签检测 | flushSseBuffer 捕获完整标签再发送 | LLM 分 token 输出，需拼接待完整 |
+
+### 1.1 SSE 标签解析
+
+`ChatService.flushSseBuffer()` — SSE 缓冲区累积 LLM token，正则 `\[(PRODUCT|ADD_TO_CART|DELETE_FROM_CART|CLEAR_CART)(?::(\w+)(?::(\+?\d+))?)?\]` 检测完整标签后分类发送结构化 JSON 事件。
+
+`isIncompleteTag()` — 检测缓冲区末尾片段是否可能为不完整标签（如 `[ADD`、`[D`），保留等待后续 token。
+
+### 1.2 标签检测修复（5 次迭代）
+
+| 问题 | 修复 |
+|------|------|
+| startsWith/regex 方向错误 | 翻转匹配逻辑 |
+| quantity 后缀 `:+2` 未覆盖 | 正则新增 `\+?` |
+| LLM 将标签拆为单字符 | isIncompleteTag 处理单独 `[` 字符 |
+
+### 1.3 客户端 SSE 事件处理
+
+`SseEvent` 新增 `AddToCart`、`DeleteFromCart`、`ClearCart` 事件类型。`ChatViewModel` 在 SSE collect 中处理：
+
+- `AddToCart(mode=set)` → `apiService.setCartQuantity()`
+- `AddToCart(mode=add)` → `apiService.addToCart()`
+- `DeleteFromCart` → `apiService.removeFromCart()`
+- `ClearCart` → 遍历删除所有购物车项
+
+`cartEventsDisabled` 标志位防止 Activity 不可见时重复处理 SSE 加购事件。
+
+### 1.4 对话驱动购物车修复
+
+| Bug | 修复 |
+|-----|------|
+| 购物车在 prompt 中不可见 | System prompt 中明确购物车状态格式 |
+| 跨话题查询污染 | 限制品类关键词提取近 5 条消息 |
+| AI 推荐多商品直接加第一个 | AI 先反问用户要哪个再操作 |
+
+---
+
+## 二、测试验证
+
+### 2.1 测试清单
+
+40 个测试点，覆盖 10 个模块：Chat API、SSE 流、商品检索、购物车 CRUD、对话驱动加购、标签解析、会话持久化、用户认证、推荐系统、前端 UI。
+
+### 2.2 测试进度
+
+```
+18/40 API 验证通过
+26/40 API + adb 通过
+40/40 全部通过
+```
+
+### 2.3 修复项
+
+| 问题 | 修复 |
+|------|------|
+| DONE 事件卡片消失 | 改为 DONE 时批量 `getProductsBatch()` 拉取 |
+| 历史消息含 `[PRODUCT:id]` | 加载时 regex 清除所有标签类型 |
+| 会话条目删除按钮太小 | 扩大点击区域 |
+
+---
+
+## 三、虚拟支付
+
+### 3.1 功能
+
+购物车页面支持复选框选择商品 → 点击结算 → 弹出支付确认对话框 → 模拟支付 → 加载动画 → 支付成功/失败提示。
+
+### 3.2 实现
+
+`CartActivity.kt` 新增 `checkedIds` 状态管理、全选/取消全选、选中商品总价计算、支付确认框。
+
+---
+
+## 四、配置优化
+
+| 变更 | 说明 |
+|------|------|
+| BASE_URL 从 local.properties 读取 | `BuildConfig.BASE_URL` 由 Gradle 从 gitignored 文件注入，不再硬编码 |
+
+---
+
+## 五、个性化推荐 V1–V3（optimization 分支）
 
 ### 设计决策
 
@@ -66,7 +157,7 @@ user_behaviors 表
 
 ---
 
-## 二、加购翻倍修复
+## 六、加购翻倍修复
 
 **现象**：商品详情页点"加入购物车"加 1 件，再点"立即购买"又加 1 件 → 购物车出现 2 件。
 
@@ -76,7 +167,7 @@ user_behaviors 表
 
 ---
 
-## 三、商品详情页补全
+## 七、商品详情页补全
 
 ### 3.1 设计决策
 
@@ -125,7 +216,7 @@ user_behaviors 表
 
 ---
 
-## 四、建议提问词条 V1
+## 八、建议提问词条 V1
 
 | 决策 | 选择 | 理由 |
 |---|---|---|
@@ -140,7 +231,7 @@ user_behaviors 表
 
 ---
 
-## 五、聊天卡片加购 + 购物车 SKU 展示
+## 九、聊天卡片加购 + 购物车 SKU 展示
 
 | 决策 | 选择 | 理由 |
 |---|---|---|
@@ -157,7 +248,7 @@ user_behaviors 表
 
 ---
 
-## 六、客户端 API 新增
+## 十、客户端 API 新增
 
 | 方法 | 说明 |
 |------|------|
@@ -170,7 +261,33 @@ user_behaviors 表
 
 ---
 
-## 七、提交记录
+## 十一、提交记录
+
+### rag_agent_frontend 分支（对话驱动购物车 + 测试 + 支付）
+
+```
+93245ea test: all 40 test points passed
+4bde988 fix: enlarge delete button in conversation item + add 10-round test case
+28c9724 fix: batch-fetch product cards at Done event + strip all tag types in history
+267ed05 test: 26/40 passed (18 API + 8 adb), 14 need manual testing
+4833a17 test: 18/40 passed via API verification, 22 need Android device
+e33369e docs: comprehensive test checklist (40 test points, 10 modules)
+60144a8 fix: isIncompleteTag now catches lone '[' character
+d062a85 fix: isIncompleteTag helper for robust partial tag detection
+d892377 fix: incomplete tag detection - flipped startsWith + regex covers quantity suffix
+d1d9ecb fix: AI asks which product before adding to cart when multiple recommended
+8d29870 fix: cart visibility in prompt, query cross-topic pollution, cart CRUD via chat
+de98af0 feat: ADD_TO_CART supports set vs add mode
+a915d89 feat: ADD_TO_CART supports quantity
+94529df feat: conversation-driven add-to-cart via [ADD_TO_CART:id] tag
+d51b7cc refactor: read BASE_URL from local.properties
+b9ca1c3 feat: virtual payment with checkbox selection in cart
+6493e24 feat: loading spinner dialog during payment processing
+0f12c56 docs: optimization backlog
+faf3f43 docs: 项目启动指南
+```
+
+### optimization 分支（个性化推荐 + 详情页补全 + 购物车优化）
 
 ```
 9b59a58 docs: Day12 商品详情页补全与购物车优化开发日志
@@ -195,4 +312,4 @@ d7a425b fix: 品类名称与数据库对齐 — 数码电子/服饰运动
 e0fce62 feat: V1 个性化推荐系统 — 猜你喜欢
 ```
 
-19 commits，spanning V1–V3 推荐 + 详情页补全 + 购物车优化。
+共 38 commits：rag_agent_frontend 分支 19 + optimization 分支 19。
