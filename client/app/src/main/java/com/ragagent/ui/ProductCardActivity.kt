@@ -234,11 +234,21 @@ class ProductCardActivity : AppCompatActivity() {
             setTextColor(0xFF5C4A3A.toInt()); textSize = 13f
             setTypeface(null, android.graphics.Typeface.BOLD)
         })
-        textBlock.addView(TextView(this).apply {
+
+        val contentTv = TextView(this).apply {
             text = content; setTextColor(0xFF6B5A4A.toInt()); textSize = 13f
             setPadding(0, 6.dpToPx(), 0, 0); setLineSpacing(4.dpToPx().toFloat(), 1f)
-        })
+            maxLines = 2; ellipsize = android.text.TextUtils.TruncateAt.END
+        }
+        textBlock.addView(contentTv)
         card.addView(textBlock)
+
+        // 点击卡片展开/收起
+        var expanded = false
+        card.setOnClickListener {
+            expanded = !expanded
+            contentTv.maxLines = if (expanded) Integer.MAX_VALUE else 2
+        }
         return card
     }
 
@@ -293,10 +303,19 @@ class ProductCardActivity : AppCompatActivity() {
             text = "Q: $q"; setTextColor(0xFF8B7355.toInt()); textSize = 13f
             setTypeface(null, android.graphics.Typeface.BOLD)
         })
-        card.addView(TextView(this).apply {
+        val answerTv = TextView(this).apply {
             text = "A: $a"; setTextColor(0xFF5C4A3A.toInt()); textSize = 13f
             setPadding(0, 6.dpToPx(), 0, 0); setLineSpacing(3.dpToPx().toFloat(), 1f)
-        })
+            maxLines = 2; ellipsize = android.text.TextUtils.TruncateAt.END
+        }
+        card.addView(answerTv)
+
+        // 点击卡片展开/收起答案
+        var expanded = false
+        card.setOnClickListener {
+            expanded = !expanded
+            answerTv.maxLines = if (expanded) Integer.MAX_VALUE else 2
+        }
         return card
     }
 
