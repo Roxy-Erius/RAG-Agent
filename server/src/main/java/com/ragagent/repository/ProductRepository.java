@@ -56,7 +56,7 @@ public class ProductRepository {
 
     public List<Map<String, Object>> findReviewsByProductId(String productId) {
         return jdbc.queryForList(
-                "SELECT id, product_id, nickname, rating, content, created_at FROM product_reviews WHERE product_id = ? ORDER BY created_at DESC",
+                "SELECT id, product_id, nickname, rating, content FROM product_reviews WHERE product_id = ? ORDER BY id DESC",
                 productId);
     }
 
