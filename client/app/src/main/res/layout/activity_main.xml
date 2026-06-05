@@ -144,9 +144,86 @@
         android:paddingBottom="8dp"
         android:clipToPadding="false"
         app:layout_constraintTop_toBottomOf="@id/recyclerRecommendations"
-        app:layout_constraintBottom_toTopOf="@id/inputLayout"
+        app:layout_constraintBottom_toTopOf="@id/suggestionsScroll"
         app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintEnd_toEndOf="parent" />
+
+    <!-- 建议提问词条（空对话时显示，横向滑动） -->
+    <HorizontalScrollView
+        android:id="@+id/suggestionsScroll"
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:paddingVertical="6dp"
+        android:scrollbars="none"
+        android:visibility="gone"
+        app:layout_constraintBottom_toTopOf="@id/inputLayout"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintEnd_toEndOf="parent">
+
+        <LinearLayout
+            android:id="@+id/suggestionsContainer"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:gravity="center_vertical"
+            android:paddingStart="12dp"
+            android:paddingEnd="12dp">
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="💡"
+                android:textSize="14sp"
+                android:layout_marginEnd="8dp" />
+
+            <TextView
+                android:id="@+id/tvSuggestion1"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginEnd="8dp"
+                android:background="@drawable/bg_tag"
+                android:paddingHorizontal="14dp"
+                android:paddingVertical="8dp"
+                android:text="推荐油皮洗面奶"
+                android:textColor="@color/text_primary"
+                android:textSize="12sp" />
+
+            <TextView
+                android:id="@+id/tvSuggestion2"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginEnd="8dp"
+                android:background="@drawable/bg_tag"
+                android:paddingHorizontal="14dp"
+                android:paddingVertical="8dp"
+                android:text="性价比高的手机"
+                android:textColor="@color/text_primary"
+                android:textSize="12sp" />
+
+            <TextView
+                android:id="@+id/tvSuggestion3"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginEnd="8dp"
+                android:background="@drawable/bg_tag"
+                android:paddingHorizontal="14dp"
+                android:paddingVertical="8dp"
+                android:text="保湿面霜推荐"
+                android:textColor="@color/text_primary"
+                android:textSize="12sp" />
+
+            <TextView
+                android:id="@+id/tvSuggestion4"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:background="@drawable/bg_tag"
+                android:paddingHorizontal="14dp"
+                android:paddingVertical="8dp"
+                android:text="送女友礼物"
+                android:textColor="@color/text_primary"
+                android:textSize="12sp" />
+        </LinearLayout>
+    </HorizontalScrollView>
 
     <!-- 进度条 -->
     <ProgressBar

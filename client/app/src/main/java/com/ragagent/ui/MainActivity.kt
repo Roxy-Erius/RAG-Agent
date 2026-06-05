@@ -55,22 +55,25 @@ class MainActivity : AppCompatActivity() {
         binding.recyclerView.layoutManager = LinearLayoutManager(this)
         binding.recyclerView.adapter = adapter
 
-        // 观察消息列表变化
+        // 观察消息列表 + 流式状态 → 控制建议词条可见性
         lifecycleScope.launch {
             viewModel.messages.collect { messages ->
                 adapter.submitList(messages) {
                     binding.recyclerView.scrollToPosition(adapter.itemCount - 1)
                 }
+                updateSuggestionsVisibility(messages)
             }
         }
-
-        // 观察流式状态
         lifecycleScope.launch {
             viewModel.isStreaming.collect { isStreaming ->
                 binding.btnSend.isEnabled = !isStreaming
                 binding.progressBar.visibility = if (isStreaming) View.VISIBLE else View.GONE
+                updateSuggestionsVisibility(viewModel.messages.value)
             }
         }
+
+        // 建议提问词条点击 → 填入输入框
+        setupSuggestions()
 
         // 发送按钮
         binding.btnSend.setOnClickListener {
@@ -156,6 +159,19 @@ class MainActivity : AppCompatActivity() {
     override fun onResume() {
         super.onResume()
         viewModel.refreshCartCount()
+    }
+
+    private fun setupSuggestions() {
+        binding.tvSuggestion1.setOnClickListener { viewModel.sendMessage("推荐一款适合油皮的洗面奶") }
+        binding.tvSuggestion2.setOnClickListener { viewModel.sendMessage("帮我找一款性价比高的手机") }
+        binding.tvSuggestion3.setOnClickListener { viewModel.sendMessage("有什么保湿效果好的面霜推荐") }
+        binding.tvSuggestion4.setOnClickListener { viewModel.sendMessage("适合送女朋友的礼物有哪些") }
+    }
+
+    private fun updateSuggestionsVisibility(messages: List<ChatMessage>) {
+        val empty = messages.isEmpty()
+        val streaming = viewModel.isStreaming.value
+        binding.suggestionsScroll.visibility = if (empty && !streaming) View.VISIBLE else View.GONE
     }
 
     /** 个性化推荐横向卡片适配器 */
