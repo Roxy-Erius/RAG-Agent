@@ -1,19 +1,72 @@
-# Day 12 — 商品详情页补全与购物车优化
+# Day 12 — 个性化推荐、商品详情页补全与购物车优化
 
-## 一、设计决策
+## 一、个性化推荐 V1–V3
+
+### 设计决策
 
 | 决策 | 选择 | 理由 |
 |---|---|---|
-| 规格选择交互 | 淘宝风格 BottomSheet | 详情页不铺满规格标签，点击摘要行弹出面板 |
-| SKU 分组 | 按属性维度拆分（颜色/存储/版本等） | 比扁平标签更清晰，动态解析不硬编码维度名 |
-| 加购翻倍修复 | 立即购买仅跳转不加购 | 根因是两个按钮都调了 addToCart，非 Android 焦点问题 |
-| 评价/FAQ 展示 | 默认 2 行截断，点击展开 | 长文本不占屏，想看全文可点击 |
-| 建议词条 | V1 固定词条横向滑动 | V2 个性化后续再做，避免和推荐卡片功能重叠 |
-| 聊天卡片加购 | 弹出规格选择面板 | 让用户在聊天流中也能选规格，而非无 SKU 加入 |
+| 推荐策略 | V1 关键词 → V2 语义 → V3 行为加权，逐级降级 | 保证总有推荐结果 |
+| V2 Embedding | ChromaDB 语义检索历史消息 Top 3 | 理解用户意图而非关键词匹配 |
+| V3 行为加权 | VIEW/CART/PURCHASE 信号 × 时间衰减 | 近期浏览权重更高 |
+| 已购过滤 | V2/V3 自动排除已购买商品，推荐相似替代品 | 避免推荐已拥有的商品 |
+| 卡片交互 | 点击跳详情页（非发消息） | 更符合用户预期 |
 
-## 二、Bug 修复
+### 1.1 V1 关键词匹配
 
-### 2.1 加购翻倍
+`ChatService.analyzeUserPreferences()` — 提取近 5 条历史消息中的品类关键词 → 随机选 3 条同品类商品。
+
+### 1.2 V2 Embedding 语义检索
+
+`RetrieverService` 新增 `retrieveByText()` — 拼接历史消息 → ChromaDB query_embeddings → 语义检索 Top 3。
+
+降级链：V2 Exception → V1 fallback。
+
+### 1.3 V3 行为加权推荐
+
+`RecommendationService` — 服务端新建，核心逻辑：
+
+```
+user_behaviors 表
+  ├── VIEW × 1.0 权重
+  ├── CART × 3.0 权重
+  └── PURCHASE × 5.0 权重
+         ×
+  时间衰减 = e^(-λ·days)  (λ=0.05)
+         ↓
+  品类得分聚合 → Top 3 品类 → 每品类 Top N 商品 → 过滤已购
+         ↓
+  插入已购商品的相似替代品（同品类、同价位段）
+```
+
+降级链：V3 → V2 → V1。
+
+### 1.4 已购过滤
+
+`ProductRepository` 新增 `findPurchasedProductIds()` — 从 `purchase_history` 表查用户已购 → V2/V3 `excludeProductIds` 参数过滤。
+
+### 1.5 服务端新增文件
+
+| 文件 | 说明 |
+|------|------|
+| `service/RecommendationService.java` | V3 行为加权推荐核心 |
+| `repository/UserBehaviorRepository.java` | 用户行为记录 + 查询 |
+| `controller/RecommendationController.java` | GET /api/recommendations |
+| `controller/BehaviorController.java` | POST /api/behaviors/record |
+| `model/UserBehavior.java` | 用户行为模型 |
+
+### 1.6 Bug 修复
+
+| Bug | 原因 | 修复 |
+|-----|------|------|
+| 推荐卡片闪退 | 滚动中 Adapter 反复 new ViewHolder | 改为复用现有 holder |
+| 点击卡片发消息 | 卡片 onClick 绑定为发送文字 | 改为跳转 ProductCardActivity |
+| 品类名称不匹配 | 代码用"数码"但 DB 是"数码电子" | 对齐为 数码电子/服饰运动 |
+| 推荐已购商品 | 未过滤 purchase_history | V2/V3 排除 + 推荐相似替代品 |
+
+---
+
+## 二、加购翻倍修复
 
 **现象**：商品详情页点"加入购物车"加 1 件，再点"立即购买"又加 1 件 → 购物车出现 2 件。
 
@@ -21,101 +74,106 @@
 
 **修复**：`btnBuyNow` 移除 `addToCart` 调用，仅跳转购物车页面。
 
-### 2.2 数据库列不匹配
+---
 
-| 表 | 问题 | 修复 |
+## 三、商品详情页补全
+
+### 3.1 设计决策
+
+| 决策 | 选择 | 理由 |
 |---|---|---|
-| `product_skus` | 查询了不存在的 `stock` 列 | 移除 |
-| `product_reviews` | 查询了不存在的 `user_id`、`created_at` 列 | 移除 |
-| `product_faqs` | 查询了不存在的 `created_at` 列 | 移除，按 `id` 排序 |
+| 规格选择交互 | 淘宝风格 BottomSheet | 详情页不铺满标签，点击摘要行弹出面板 |
+| SKU 分组 | 按属性维度拆分（颜色/存储/版本） | 动态解析 JSON，不硬编码维度名 |
+| 评价/FAQ | 默认 2 行截断，点击展开 | 长文本不占屏 |
+| 购物车 SKU | 按 (product_id, sku_id) 去重 | 不同规格独立成行 |
 
-## 三、后端实现
+### 3.2 客户端
 
-### 3.1 新增 API
+| 文件 | 说明 |
+|------|------|
+| `ui/SpecSheetDialog.kt` | BottomSheetDialogFragment，SKU 解析 → 按维度分组 → 动态渲染标签行 → 交叉匹配 → 数量调节 → 确认加购 |
+| `res/layout/bottom_sheet_spec.xml` | 面板布局（商品图 + 价格 + 规格组容器 + 数量 + 确定按钮） |
+| `ui/ProductCardActivity.kt` | 规格摘要行 + SpecSheetDialog 集成 + 评价/FAQ 展示 + SKU 价格更新 |
+| `res/layout/activity_product_detail.xml` | 规格摘要行 + 评价区 + FAQ 区 + 展开/收起 |
 
-| 方法 | 路径 | 说明 |
-|------|------|------|
-| GET | `/api/products/{id}/skus` | 商品 SKU 列表 |
-| GET | `/api/products/{id}/reviews` | 用户评价列表 |
-| GET | `/api/products/{id}/faqs` | FAQ 问答列表 |
+新增 drawable：`bg_spec_summary`、`bottom_sheet_bg`、`bg_confirm_btn`、`bg_qty_btn`、`bg_tag_selected`。
 
-### 3.2 购物车 SKU 支持
+### 3.3 服务端
+
+| 端点 | 说明 |
+|------|------|
+| GET `/api/products/{id}/skus` | 商品 SKU 列表 |
+| GET `/api/products/{id}/reviews` | 用户评价列表 |
+| GET `/api/products/{id}/faqs` | FAQ 问答列表 |
 
 | 文件 | 变更 |
 |------|------|
-| `model/CartItem.java` | 新增 `skuId`、`skuLabel` 字段 |
-| `repository/CartRepository.java` | add() 按 (product_id, sku_id) 去重；查询 JOIN product_skus 取 SKU 价格 |
-| `service/CartService.java` | addToCart 传递 SKU 参数 |
-| `controller/CartController.java` | /add 接口接收 skuId、skuLabel 参数 |
+| `ProductRepository.java` | 新增 findSkus/findReviews/findFaqs |
+| `ProductController.java` | 新增 3 个端点 |
+| `CartItem.java` | 新增 skuId、skuLabel 字段 |
+| `CartRepository.java` | add 按 (product_id, sku_id) 去重；查询 JOIN product_skus 取 SKU 价格 |
+| `CartService.java` | addToCart 传递 SKU 参数 |
+| `CartController.java` | /add 接收 skuId、skuLabel |
 
-## 四、前端实现
+### 3.4 数据库适配
 
-### 4.1 商品详情页
+| 表 | 问题 | 修复 |
+|---|---|---|
+| `product_skus` | SQL 查了不存在的 `stock` 列 | 移除 |
+| `product_reviews` | SQL 查了不存在的 `user_id`、`created_at` 列 | 移除 |
+| `product_faqs` | SQL 查了不存在的 `created_at` 列 | 移除，按 id 排序 |
 
-| 文件 | 说明 |
+---
+
+## 四、建议提问词条 V1
+
+| 决策 | 选择 | 理由 |
+|---|---|---|
+| 版本策略 | V1 固定词条，V2 个性化后续做 | 避免和推荐卡片功能重叠 |
+| 位置 | 输入框上方横向滑动词条 | 类似推荐卡片，视觉统一 |
+| 交互 | 点击直接发送 | 减少操作步骤 |
+
+| 文件 | 变更 |
 |------|------|
-| `ui/ProductCardActivity.kt` | 规格摘要行 + SpecSheetDialog 集成 + 评价/FAQ 展示 |
-| `ui/SpecSheetDialog.kt` | BottomSheetDialogFragment：SKU 解析 → 按维度分组 → 动态渲染标签行 → 选择匹配 → 数量调节 → 确认加购 |
-| `res/layout/bottom_sheet_spec.xml` | 底部面板布局（商品图 + 价格 + 规格组容器 + 数量 + 确定按钮） |
-| `res/layout/activity_product_detail.xml` | 规格摘要行 + 评价区 + FAQ 区 |
-| `res/drawable/bg_spec_summary.xml` | 规格摘要行背景 |
-| `res/drawable/bottom_sheet_bg.xml` | 面板圆角背景 |
-| `res/drawable/bg_confirm_btn.xml` | 确定按钮 |
-| `res/drawable/bg_qty_btn.xml` | 数量步进按钮 |
-| `res/drawable/bg_tag_selected.xml` | 选中标签样式 |
+| `activity_main.xml` | 新增 HorizontalScrollView + 4 个词条 |
+| `MainActivity.kt` | 空对话 + 非流式时显示，点击 sendMessage() |
 
-**SpecSheetDialog 核心逻辑**：
+---
 
-```
-SKU JSON properties → parseProperties() → Map<String,Map<String,String>>
-                                                  ↓
-                                          specDimensions: LinkedHashMap
-                                          "颜色" → ["深空灰","星河银","雅丹黑"]
-                                          "存储" → ["256GB","512GB","1TB"]
-                                                  ↓
-                                     createDimensionRow() × N
-                                     createTagView() → 可选/不可用灰度
-                                                  ↓
-                                    onSpecValueSelected() → SKU 交叉匹配
-                                    findBestMatch() → 降级策略
-```
+## 五、聊天卡片加购 + 购物车 SKU 展示
 
-**数量调节**：− / + 步进器，范围 1–99。
+| 决策 | 选择 | 理由 |
+|---|---|---|
+| 聊天卡片加购 | 弹出 SpecSheetDialog 选规格 | 确保每次加购都有 SKU |
+| 按钮行为 | 始终可点击，不限制重复加购 | 用户可多次加同一商品不同规格 |
+| 购物车规格 | 每行显示商品名 + 规格小字 | 无 SKU 时显示"标准" |
 
-### 4.2 建议提问词条 V1
-
-| 文件 | 说明 |
+| 文件 | 变更 |
 |------|------|
-| `res/layout/activity_main.xml` | 输入框上方 HorizontalScrollView + 4 个词条 TextView |
-| `ui/MainActivity.kt` | 空对话 + 非流式时显示，点击直接发送消息 |
+| `MainActivity.kt` | 聊天卡片 onAddToCart → showSpecSheetForProduct() |
+| `ChatAdapter.kt` | 移除 addedProductIds 状态，按钮固定显示"加入购物车" |
+| `item_cart_product.xml` | 新增 tvCartSkuLabel（11sp 灰色小字） |
+| `CartAdapter.kt` | 绑定 SKU 标签 |
 
-4 个固定词条：推荐油皮洗面奶、性价比高的手机、保湿面霜推荐、送女友礼物。
+---
 
-### 4.3 聊天卡片加购
-
-`MainActivity.kt`：点聊天卡片"加入购物车"→ `showSpecSheetForProduct()` → 弹出 SpecSheetDialog → 选规格 + 数量 → 确定 → addToCart with SKU。
-
-`ChatAdapter.kt`：移除 `addedProductIds` 状态管理，按钮始终可点击，每次弹出规格选择。
-
-### 4.4 购物车 SKU 展示
-
-| 文件 | 说明 |
-|------|------|
-| `res/layout/item_cart_product.xml` | 商品名下方新增 `tvCartSkuLabel`（11sp 灰色小字） |
-| `ui/CartAdapter.kt` | 绑定 SKU 标签，无 SKU 时显示"标准" |
-
-### 4.5 客户端 API
+## 六、客户端 API 新增
 
 | 方法 | 说明 |
 |------|------|
-| `ApiService.getProductSkus(productId)` | 获取 SKU 列表 |
-| `ApiService.getProductReviews(productId)` | 获取评价列表 |
-| `ApiService.getProductFaqs(productId)` | 获取 FAQ 列表 |
-| `ApiService.addToCart(skuId, skuLabel)` | 加购支持 SKU 参数 |
+| `getProductSkus(productId)` | SKU 列表 |
+| `getProductReviews(productId)` | 评价列表 |
+| `getProductFaqs(productId)` | FAQ 列表 |
+| `getRecommendations()` | 个性化推荐 |
+| `recordBehavior(productId, actionType)` | 行为记录 |
+| `addToCart(sessionId, productId, skuId, skuLabel, quantity)` | 加购支持 SKU |
 
-## 五、提交记录
+---
+
+## 七、提交记录
 
 ```
+9b59a58 docs: Day12 商品详情页补全与购物车优化开发日志
 1f69a08 feat: 聊天卡片加购弹出规格选择 + 购物车展示规格标签 + 清理待开发项
 56218d7 docs: #7 建议提问词条 V1 完成，V2 个性化待后续开发
 c975f4f feat: V1 建议提问词条 — 输入框上方横向滑动词条，点击直接发送
@@ -125,6 +183,16 @@ bbbcf0f fix: 移除 product_reviews 查询中不存在的 created_at 列
 fb59b6a fix: 修正 product_skus/reviews/faqs 查询字段，移除数据库中不存在的列
 b8bd165 feat: 商品详情页补全 — 规格选择 BottomSheet + 用户评价 + FAQ + SKU 支持
 d98e13f fix: 立即购买按钮移除重复 addToCart，仅跳转购物车，消除加购翻倍问题
+3f05813 docs: 更新优化清单 — V1-V3 已完成，补充附带完成项
+afc5a60 fix: V3/V2 推荐过滤已购买商品，推荐相似替代品而非已购
+0d876b3 feat: V3 行为加权推荐 + 时间衰减，降级链 V3→V2→V1
+159541c fix: 推荐卡片 adapter 复用，避免滚动中新建导致闪退
+39c837f feat: V2 语义推荐 — 历史消息 Embedding 检索替代关键词匹配，V1 降级保留
+efa61f3 feat: 商品详情页加入购物车和立即购买按钮
+0897d7b fix: 推荐卡片宽度 140→180dp，点击跳转详情页而非发消息
+d7a425b fix: 品类名称与数据库对齐 — 数码电子/服饰运动
+2a67606 docs: 个性化推荐拆为 V1/V2/V3 三级方案
+e0fce62 feat: V1 个性化推荐系统 — 猜你喜欢
 ```
 
-9 commits, 30 files changed.
+19 commits，spanning V1–V3 推荐 + 详情页补全 + 购物车优化。
