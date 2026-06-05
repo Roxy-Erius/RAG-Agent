@@ -50,19 +50,19 @@ public class ProductRepository {
 
     public List<Map<String, Object>> findSkusByProductId(String productId) {
         return jdbc.queryForList(
-                "SELECT sku_id, product_id, properties, price, stock FROM product_skus WHERE product_id = ?",
+                "SELECT sku_id, product_id, properties, price FROM product_skus WHERE product_id = ?",
                 productId);
     }
 
     public List<Map<String, Object>> findReviewsByProductId(String productId) {
         return jdbc.queryForList(
-                "SELECT id, product_id, user_id, nickname, rating, content, created_at FROM product_reviews WHERE product_id = ? ORDER BY created_at DESC",
+                "SELECT id, product_id, nickname, rating, content, created_at FROM product_reviews WHERE product_id = ? ORDER BY created_at DESC",
                 productId);
     }
 
     public List<Map<String, Object>> findFaqsByProductId(String productId) {
         return jdbc.queryForList(
-                "SELECT id, product_id, question, answer, created_at FROM product_faqs WHERE product_id = ? ORDER BY created_at ASC",
+                "SELECT id, product_id, question, answer FROM product_faqs WHERE product_id = ? ORDER BY id ASC",
                 productId);
     }
 }
