@@ -17,8 +17,6 @@ class ChatAdapter(
     private val onAddToCart: (Product) -> Unit
 ) : ListAdapter<ChatMessage, RecyclerView.ViewHolder>(DiffCallback) {
 
-    private val addedProductIds = mutableSetOf<String>()
-
     companion object {
         private const val VIEW_TYPE_USER = 0
         private const val VIEW_TYPE_AI = 1
@@ -114,39 +112,25 @@ class ChatAdapter(
             binding.tvProductPrice.text = "¥${product.basePrice}"
             binding.tvProductBrand.text = product.brand
 
-            // 加购按钮状态
-            val added = addedProductIds.contains(product.productId)
-            if (added) {
-                binding.tvAddToCart.text = "✓ 已加入购物车"
-                binding.tvAddToCart.setBackgroundColor(
-                    binding.root.context.getColor(android.R.color.transparent))
-                binding.tvAddToCart.setTextColor(
-                    binding.root.context.getColor(R.color.accent))
-            } else {
-                binding.tvAddToCart.text = "加入购物车"
-                binding.tvAddToCart.background =
-                    binding.root.context.getDrawable(R.drawable.bg_tag)
-                binding.tvAddToCart.setTextColor(
-                    binding.root.context.getColor(R.color.text_primary))
-            }
+            binding.tvAddToCart.text = "加入购物车"
+            binding.tvAddToCart.background =
+                binding.root.context.getDrawable(R.drawable.bg_tag)
+            binding.tvAddToCart.setTextColor(
+                binding.root.context.getColor(R.color.text_primary))
 
             binding.tvAddToCart.setOnClickListener {
-                if (!added) {
-                    if (!com.ragagent.auth.AuthManager.isLoggedIn()) {
-                        androidx.appcompat.app.AlertDialog.Builder(binding.root.context)
-                            .setTitle("请先登录")
-                            .setMessage("登录后即可使用购物车功能")
-                            .setPositiveButton("去登录") { _, _ ->
-                                binding.root.context.startActivity(
-                                    android.content.Intent(binding.root.context, LoginActivity::class.java))
-                            }
-                            .setNegativeButton("取消", null)
-                            .show()
-                    } else {
-                        addedProductIds.add(product.productId)
-                        onAddToCart(product)
-                        bind(product)
-                    }
+                if (!com.ragagent.auth.AuthManager.isLoggedIn()) {
+                    androidx.appcompat.app.AlertDialog.Builder(binding.root.context)
+                        .setTitle("请先登录")
+                        .setMessage("登录后即可使用购物车功能")
+                        .setPositiveButton("去登录") { _, _ ->
+                            binding.root.context.startActivity(
+                                android.content.Intent(binding.root.context, LoginActivity::class.java))
+                        }
+                        .setNegativeButton("取消", null)
+                        .show()
+                } else {
+                    onAddToCart(product)
                 }
             }
         }

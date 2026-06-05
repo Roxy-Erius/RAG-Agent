@@ -65,6 +65,7 @@ class CartAdapter(
 
         fun bind(item: CartItemDto) {
             binding.tvCartProductName.text = item.productTitle ?: item.productId
+            binding.tvCartSkuLabel.text = item.skuLabel?.takeIf { it.isNotBlank() } ?: "标准"
             binding.tvCartProductPrice.text = "¥${item.productPrice ?: 0.0}"
             binding.tvQuantity.text = item.quantity.toString()
             binding.cbSelect.isChecked = checkedIds.contains(item.id)

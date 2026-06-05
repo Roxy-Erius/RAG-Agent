@@ -18,6 +18,7 @@ import androidx.recyclerview.widget.RecyclerView
 import com.ragagent.databinding.ActivityMainBinding
 import com.ragagent.model.ChatMessage
 import com.ragagent.model.Product
+import com.ragagent.network.ApiService
 import com.ragagent.viewmodel.ChatViewModel
 import kotlinx.coroutines.launch
 
@@ -26,6 +27,7 @@ class MainActivity : AppCompatActivity() {
     private lateinit var binding: ActivityMainBinding
     private lateinit var viewModel: ChatViewModel
     private lateinit var adapter: ChatAdapter
+    private val apiService = ApiService()
 
     companion object {
         private const val REQUEST_HISTORY = 1001
@@ -47,8 +49,7 @@ class MainActivity : AppCompatActivity() {
                 startActivity(intent)
             },
             onAddToCart = { product ->
-                viewModel.addToCart(product.productId)
-                Toast.makeText(this, "✅ 已加入购物车", Toast.LENGTH_SHORT).show()
+                showSpecSheetForProduct(product)
             }
         )
 
@@ -159,6 +160,33 @@ class MainActivity : AppCompatActivity() {
     override fun onResume() {
         super.onResume()
         viewModel.refreshCartCount()
+    }
+
+    private fun showSpecSheetForProduct(product: Product) {
+        val dialog = SpecSheetDialog.newInstance(
+            productId = product.productId,
+            imagePath = product.imagePath,
+            basePrice = product.basePrice ?: 0.0,
+            currentSkuId = null,
+            currentSkuLabel = null
+        )
+        dialog.setOnSpecConfirmedListener(object : SpecSheetDialog.OnSpecConfirmedListener {
+            override fun onSpecConfirmed(skuId: String?, skuLabel: String?, quantity: Int) {
+                lifecycleScope.launch {
+                    val item = apiService.addToCart(
+                        viewModel.sessionId, product.productId, skuId, skuLabel, quantity
+                    )
+                    if (item != null) {
+                        Toast.makeText(this@MainActivity, "✅ 已加入购物车", Toast.LENGTH_SHORT).show()
+                        apiService.recordBehavior(product.productId, "CART")
+                        viewModel.refreshCartCount()
+                    } else {
+                        Toast.makeText(this@MainActivity, "加入购物车失败", Toast.LENGTH_SHORT).show()
+                    }
+                }
+            }
+        })
+        dialog.show(supportFragmentManager, SpecSheetDialog.TAG)
     }
 
     private fun setupSuggestions() {
