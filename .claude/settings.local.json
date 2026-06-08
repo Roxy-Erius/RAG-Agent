@@ -46,7 +46,10 @@
       "Bash(powershell -Command \"Stop-Process -Id 18852 -Force\")",
       "Bash(mysql -h 159.75.105.25 -P 3306 -u rag_agent -pfH7SfWjMeYTHfEeG rag_agent -e 'CREATE TABLE IF NOT EXISTS users \\( *)",
       "Bash(D:\\\\apache-maven-3.9.9\\\\bin\\\\mvn compile *)",
-      "Bash(D:/apache-maven-3.9.9/bin/mvn compile *)"
+      "Bash(D:/apache-maven-3.9.9/bin/mvn compile *)",
+      "Bash(taskkill //F //PID 3460)",
+      "Bash(/d/develop/apache-maven-3.9.4/bin/mvn.cmd spring-boot:run)",
+      "Bash(curl -s -N \"http://localhost:8080/api/chat/stream?message=2&sessionId=test456\")"
     ]
   }
 }
