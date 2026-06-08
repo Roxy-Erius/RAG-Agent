@@ -1,5 +1,6 @@
 package com.ragagent.ui
 
+import android.content.Intent
 import android.view.LayoutInflater
 import android.view.ViewGroup
 import androidx.recyclerview.widget.RecyclerView
@@ -69,6 +70,18 @@ class CartAdapter(
             binding.tvCartProductPrice.text = "¥${item.productPrice ?: 0.0}"
             binding.tvQuantity.text = item.quantity.toString()
             binding.cbSelect.isChecked = checkedIds.contains(item.id)
+
+            // 加载商品图片
+            com.ragagent.util.ImageUtil.loadImage(
+                binding.ivCartProductImage, item.productImageBase64)
+
+            // 点击商品区域（图片+文字）跳转详情页
+            binding.productArea.setOnClickListener {
+                val ctx = binding.root.context
+                ctx.startActivity(Intent(ctx, ProductCardActivity::class.java).apply {
+                    putExtra(ProductCardActivity.EXTRA_PRODUCT_ID, item.productId)
+                })
+            }
 
             binding.cbSelect.setOnCheckedChangeListener(null)  // avoid trigger during bind
             binding.cbSelect.setOnCheckedChangeListener { _, isChecked ->

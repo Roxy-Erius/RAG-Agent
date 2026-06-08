@@ -2,6 +2,7 @@ package com.ragagent.controller;
 
 import com.ragagent.model.Product;
 import com.ragagent.security.JwtAuthFilter;
+import com.ragagent.service.ImageService;
 import com.ragagent.service.RecommendationService;
 import jakarta.servlet.http.HttpServletRequest;
 import org.slf4j.Logger;
@@ -17,10 +18,12 @@ public class RecommendationController {
     private static final Logger log = LoggerFactory.getLogger(RecommendationController.class);
     private final RecommendationService recommendationService;
     private final JwtAuthFilter jwtAuthFilter;
+    private final ImageService imageService;
 
-    public RecommendationController(RecommendationService recommendationService, JwtAuthFilter jwtAuthFilter) {
+    public RecommendationController(RecommendationService recommendationService, JwtAuthFilter jwtAuthFilter, ImageService imageService) {
         this.recommendationService = recommendationService;
         this.jwtAuthFilter = jwtAuthFilter;
+        this.imageService = imageService;
     }
 
     @GetMapping("/recommendations")
@@ -32,6 +35,7 @@ public class RecommendationController {
         }
         log.info("==> GET /api/recommendations | userId={}", userId);
         List<Product> products = recommendationService.recommend(userId);
+        imageService.fillImages(products);
         return ResponseEntity.ok(products);
     }
 }

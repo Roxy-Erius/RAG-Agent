@@ -14,6 +14,7 @@ public class CartItem {
     private String productBrand;
     private Double productPrice;
     private String productImagePath;
+    private String productImageBase64;
 
     public CartItem() {}
 
@@ -39,4 +40,6 @@ public class CartItem {
     public void setProductPrice(Double productPrice) { this.productPrice = productPrice; }
     public String getProductImagePath() { return productImagePath; }
     public void setProductImagePath(String productImagePath) { this.productImagePath = productImagePath; }
+    public String getProductImageBase64() { return productImageBase64; }
+    public void setProductImageBase64(String productImageBase64) { this.productImageBase64 = productImageBase64; }
 }

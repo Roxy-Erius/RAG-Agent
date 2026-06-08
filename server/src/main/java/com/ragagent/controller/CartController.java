@@ -3,6 +3,7 @@ package com.ragagent.controller;
 import com.ragagent.model.CartItem;
 import com.ragagent.security.JwtAuthFilter;
 import com.ragagent.service.CartService;
+import com.ragagent.service.ImageService;
 import jakarta.servlet.http.HttpServletRequest;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -18,10 +19,12 @@ public class CartController {
     private static final Logger log = LoggerFactory.getLogger(CartController.class);
     private final CartService cartService;
     private final JwtAuthFilter jwtAuthFilter;
+    private final ImageService imageService;
 
-    public CartController(CartService cartService, JwtAuthFilter jwtAuthFilter) {
+    public CartController(CartService cartService, JwtAuthFilter jwtAuthFilter, ImageService imageService) {
         this.cartService = cartService;
         this.jwtAuthFilter = jwtAuthFilter;
+        this.imageService = imageService;
     }
 
     @PostMapping("/add")
@@ -87,6 +90,10 @@ public class CartController {
             items = cartService.getCartByUser(userId);
         } else {
             items = cartService.getCart(sessionId);
+        }
+        // 填充商品图片 Base64
+        for (CartItem item : items) {
+            item.setProductImageBase64(imageService.getImageBase64(item.getProductImagePath()));
         }
         return ResponseEntity.ok(items);
     }

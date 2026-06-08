@@ -49,10 +49,12 @@ class ProductCardActivity : AppCompatActivity() {
             binding.tvPrice.text = "¥${product.basePrice}"
             binding.tvDescription.text = product.marketingDescription ?: "暂无描述"
 
-            if (!product.imagePath.isNullOrBlank()) {
-                com.bumptech.glide.Glide.with(this@ProductCardActivity)
-                    .load(product.imagePath)
-                    .into(binding.ivProduct)
+            com.ragagent.util.ImageUtil.loadImage(binding.ivProduct, product.imageBase64)
+            // 点击大图查看
+            if (!product.imageBase64.isNullOrBlank()) {
+                binding.ivProduct.setOnClickListener {
+                    ImageViewerDialog(this@ProductCardActivity, product.imageBase64!!).show()
+                }
             }
             apiService.recordBehavior(productId, "VIEW")
 
@@ -70,11 +72,33 @@ class ProductCardActivity : AppCompatActivity() {
                 showLoginDialog()
                 return@setOnClickListener
             }
-            lifecycleScope.launch {
-                apiService.addToCart(sessionId, product.productId, selectedSkuId, selectedSkuLabel)
-                Toast.makeText(this@ProductCardActivity, "✅ 已加入购物车", Toast.LENGTH_SHORT).show()
-                apiService.recordBehavior(product.productId, "CART")
-            }
+            // 打开规格选择弹窗
+            val dialog = SpecSheetDialog.newInstance(
+                productId = product.productId,
+                imageBase64 = product.imageBase64,
+                basePrice = product.basePrice ?: 0.0,
+                currentSkuId = selectedSkuId,
+                currentSkuLabel = selectedSkuLabel
+            )
+            dialog.setOnSpecConfirmedListener(object : SpecSheetDialog.OnSpecConfirmedListener {
+                override fun onSpecConfirmed(skuId: String?, skuLabel: String?, quantity: Int) {
+                    selectedSkuId = skuId
+                    selectedSkuLabel = skuLabel
+                    binding.tvSpecSelected.text = "已选：${skuLabel ?: "标准"}"
+                    lifecycleScope.launch {
+                        val item = apiService.addToCart(
+                            sessionId, product.productId, selectedSkuId, selectedSkuLabel, quantity
+                        )
+                        if (item != null) {
+                            Toast.makeText(this@ProductCardActivity, "✅ 已加入购物车", Toast.LENGTH_SHORT).show()
+                            apiService.recordBehavior(product.productId, "CART")
+                        } else {
+                            Toast.makeText(this@ProductCardActivity, "加入购物车失败", Toast.LENGTH_SHORT).show()
+                        }
+                    }
+                }
+            })
+            dialog.show(supportFragmentManager, SpecSheetDialog.TAG)
         }
 
         binding.btnBuyNow.setOnClickListener {
@@ -130,7 +154,7 @@ class ProductCardActivity : AppCompatActivity() {
                 val product = currentProduct ?: return@setOnClickListener
                 val dialog = SpecSheetDialog.newInstance(
                     productId = productId,
-                    imagePath = product.imagePath,
+                    imageBase64 = product.imageBase64,
                     basePrice = product.basePrice ?: 0.0,
                     currentSkuId = selectedSkuId,
                     currentSkuLabel = selectedSkuLabel

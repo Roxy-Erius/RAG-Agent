@@ -176,7 +176,8 @@ class ApiService {
         val productTitle: String?,
         val productBrand: String?,
         val productPrice: Double?,
-        val productImagePath: String?
+        val productImagePath: String?,
+        val productImageBase64: String?
     )
 
     suspend fun addToCart(

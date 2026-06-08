@@ -112,6 +112,10 @@ class ChatAdapter(
             binding.tvProductPrice.text = "¥${product.basePrice}"
             binding.tvProductBrand.text = product.brand
 
+            // 加载商品图片（Base64 或占位图）
+            com.ragagent.util.ImageUtil.loadImage(
+                binding.ivProductImage, product.imageBase64, R.drawable.bg_product_placeholder)
+
             binding.tvAddToCart.text = "加入购物车"
             binding.tvAddToCart.background =
                 binding.root.context.getDrawable(R.drawable.bg_tag)

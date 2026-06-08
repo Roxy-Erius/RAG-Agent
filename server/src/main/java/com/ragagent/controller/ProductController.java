@@ -2,6 +2,7 @@ package com.ragagent.controller;
 
 import com.ragagent.model.Product;
 import com.ragagent.repository.ProductRepository;
+import com.ragagent.service.ImageService;
 import com.ragagent.service.RetrieverService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -20,10 +21,12 @@ public class ProductController {
 
     private final ProductRepository productRepository;
     private final RetrieverService retrieverService;
+    private final ImageService imageService;
 
-    public ProductController(ProductRepository productRepository, RetrieverService retrieverService) {
+    public ProductController(ProductRepository productRepository, RetrieverService retrieverService, ImageService imageService) {
         this.productRepository = productRepository;
         this.retrieverService = retrieverService;
+        this.imageService = imageService;
     }
 
     @GetMapping("/{id}")
@@ -34,6 +37,7 @@ public class ProductController {
             log.warn("商品不存在: {}", id);
             return ResponseEntity.notFound().build();
         }
+        imageService.fillImages(List.of(product));
         return ResponseEntity.ok(product);
     }
 
@@ -45,6 +49,7 @@ public class ProductController {
                 .toList();
         log.debug("GET /api/products/batch | ids={} | count={}", ids, idList.size());
         List<Product> products = productRepository.findByIds(idList);
+        imageService.fillImages(products);
         return ResponseEntity.ok(products);
     }
 
@@ -57,6 +62,7 @@ public class ProductController {
         List<String> productIds = retrieverService.retrieveByText(query, topK, category);
         log.info("<== 语义搜索结果 | query=\"{}\" | found={}", query, productIds.size());
         List<Product> products = productRepository.findByIds(productIds);
+        imageService.fillImages(products);
         return ResponseEntity.ok(products);
     }
 

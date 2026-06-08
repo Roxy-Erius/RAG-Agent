@@ -1,28 +1,21 @@
 plugins {
     id("com.android.application")
+    id("org.jetbrains.kotlin.android")
 }
 
 android {
     namespace = "com.ragagent"
-    compileSdk = 36
+    compileSdk = 35
 
     defaultConfig {
         applicationId = "com.ragagent"
         minSdk = 26
-        targetSdk = 36
+        targetSdk = 35
         versionCode = 1
         versionName = "1.0"
 
-        // 后端地址 — 从 local.properties 读取（不提交到 Git），每人自己配
-        // 模拟器默认 http://10.0.2.2:8080，真机 USB 用局域网 IP
-        val localFile = rootProject.file("local.properties")
-        val baseUrl = if (localFile.exists()) {
-            localFile.readLines()
-                .firstOrNull { it.startsWith("base.url=") }
-                ?.substringAfter("base.url=")
-                ?.trim() ?: "http://10.0.2.2:8080"
-        } else "http://10.0.2.2:8080"
-        buildConfigField("String", "BASE_URL", "\"$baseUrl\"")
+        // 后端地址 — 模拟器用 http://10.0.2.2:8080，真机改局域网 IP
+        buildConfigField("String", "BASE_URL", "\"http://10.0.2.2:8080\"")
     }
 
     buildTypes {
@@ -37,6 +30,9 @@ android {
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17
+    }
+    kotlinOptions {
+        jvmTarget = "17"
     }
     buildFeatures {
         viewBinding = true

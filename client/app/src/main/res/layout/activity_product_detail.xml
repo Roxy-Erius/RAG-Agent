@@ -51,7 +51,7 @@
                 android:id="@+id/ivProduct"
                 android:layout_width="match_parent"
                 android:layout_height="240dp"
-                android:scaleType="centerCrop"
+                android:scaleType="fitCenter"
                 android:background="@drawable/bg_product_placeholder" />
 
             <!-- 信息区 -->

@@ -165,7 +165,7 @@ class MainActivity : AppCompatActivity() {
     private fun showSpecSheetForProduct(product: Product) {
         val dialog = SpecSheetDialog.newInstance(
             productId = product.productId,
-            imagePath = product.imagePath,
+            imageBase64 = product.imageBase64,
             basePrice = product.basePrice ?: 0.0,
             currentSkuId = null,
             currentSkuLabel = null
@@ -237,7 +237,7 @@ class MainActivity : AppCompatActivity() {
             val image = ImageView(parent.context).apply {
                 layoutParams = LinearLayout.LayoutParams(
                     ViewGroup.LayoutParams.MATCH_PARENT, 120.dpToPx())
-                scaleType = ImageView.ScaleType.CENTER_CROP
+                scaleType = ImageView.ScaleType.FIT_CENTER
                 setBackgroundColor(Color.parseColor("#F5EFE5"))
                 id = View.generateViewId()
             }
@@ -274,10 +274,12 @@ class MainActivity : AppCompatActivity() {
         override fun onBindViewHolder(holder: ViewHolder, position: Int) {
             val product = products[position]
             val content = holder.card.getChildAt(0) as LinearLayout
+            val image = content.findViewById<ImageView>(content.getChildAt(0).id)
             val title = content.findViewById<TextView>(content.getChildAt(1).id)
             val price = content.findViewById<TextView>(content.getChildAt(2).id)
             title.text = product.title
             price.text = "¥${product.basePrice.toInt()}"
+            com.ragagent.util.ImageUtil.loadImage(image, product.imageBase64)
             holder.card.setOnClickListener { onClick(product) }
         }
 

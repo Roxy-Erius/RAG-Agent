@@ -10,7 +10,6 @@ import android.widget.LinearLayout
 import android.widget.TextView
 import androidx.appcompat.app.AlertDialog
 import androidx.lifecycle.lifecycleScope
-import com.bumptech.glide.Glide
 import com.google.android.material.bottomsheet.BottomSheetDialogFragment
 import com.google.gson.Gson
 import com.google.gson.reflect.TypeToken
@@ -24,21 +23,21 @@ class SpecSheetDialog : BottomSheetDialogFragment() {
     companion object {
         const val TAG = "SpecSheetDialog"
         private const val ARG_PRODUCT_ID = "product_id"
-        private const val ARG_IMAGE_PATH = "image_path"
+        private const val ARG_IMAGE_BASE64 = "image_base64"
         private const val ARG_BASE_PRICE = "base_price"
         private const val ARG_CURRENT_SKU_ID = "current_sku_id"
         private const val ARG_CURRENT_SKU_LABEL = "current_sku_label"
 
         fun newInstance(
             productId: String,
-            imagePath: String?,
+            imageBase64: String?,
             basePrice: Double,
             currentSkuId: String?,
             currentSkuLabel: String?
         ): SpecSheetDialog = SpecSheetDialog().apply {
             arguments = Bundle().apply {
                 putString(ARG_PRODUCT_ID, productId)
-                putString(ARG_IMAGE_PATH, imagePath)
+                putString(ARG_IMAGE_BASE64, imageBase64)
                 putDouble(ARG_BASE_PRICE, basePrice)
                 putString(ARG_CURRENT_SKU_ID, currentSkuId)
                 putString(ARG_CURRENT_SKU_LABEL, currentSkuLabel)
@@ -100,16 +99,14 @@ class SpecSheetDialog : BottomSheetDialogFragment() {
         btnConfirm = view.findViewById(R.id.btnSheetConfirm)
 
         val productId = arguments?.getString(ARG_PRODUCT_ID) ?: return dismiss()
-        val imagePath = arguments?.getString(ARG_IMAGE_PATH)
+        val imageBase64 = arguments?.getString(ARG_IMAGE_BASE64)
         val basePrice = arguments?.getDouble(ARG_BASE_PRICE) ?: 0.0
         currentSkuId = arguments?.getString(ARG_CURRENT_SKU_ID)
         currentSkuLabel = arguments?.getString(ARG_CURRENT_SKU_LABEL)
         currentPrice = basePrice
 
         tvPrice.text = "¥$basePrice"
-        if (!imagePath.isNullOrBlank()) {
-            Glide.with(requireContext()).load(imagePath).into(ivProduct)
-        }
+        com.ragagent.util.ImageUtil.loadImage(ivProduct, imageBase64)
 
         lifecycleScope.launch {
             loadAndParseSkus(productId)
@@ -196,17 +193,23 @@ class SpecSheetDialog : BottomSheetDialogFragment() {
     private fun createDimensionRow(dimName: String, values: List<String>): LinearLayout {
         val row = LinearLayout(requireContext()).apply {
             orientation = LinearLayout.VERTICAL
-            (layoutParams as? LinearLayout.LayoutParams)?.topMargin = 14.dpToPx()
+            layoutParams = LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                LinearLayout.LayoutParams.WRAP_CONTENT
+            ).apply { topMargin = 16.dpToPx() }
+            setPadding(0, 8.dpToPx(), 0, 8.dpToPx())
         }
         row.addView(TextView(requireContext()).apply {
             text = dimName
             setTextColor(0xFF8B7B6B.toInt())
-            textSize = 12f
+            textSize = 13f
             setTypeface(null, android.graphics.Typeface.BOLD)
         })
-        val tagsRow = LinearLayout(requireContext()).apply {
-            orientation = LinearLayout.HORIZONTAL
-            (layoutParams as? LinearLayout.LayoutParams)?.topMargin = 6.dpToPx()
+        val tagsRow = FlowLayout(requireContext()).apply {
+            layoutParams = LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                LinearLayout.LayoutParams.WRAP_CONTENT
+            ).apply { topMargin = 10.dpToPx() }
         }
         val current = selectedValues[dimName]
         for (value in values) {
@@ -221,7 +224,10 @@ class SpecSheetDialog : BottomSheetDialogFragment() {
             text = value
             textSize = 13f
             setPadding(14.dpToPx(), 8.dpToPx(), 14.dpToPx(), 8.dpToPx())
-            (layoutParams as? LinearLayout.LayoutParams)?.marginEnd = 10.dpToPx()
+            layoutParams = ViewGroup.LayoutParams(
+                ViewGroup.LayoutParams.WRAP_CONTENT,
+                ViewGroup.LayoutParams.WRAP_CONTENT
+            )
 
             if (selected) {
                 setBackgroundResource(R.drawable.bg_tag_selected)
