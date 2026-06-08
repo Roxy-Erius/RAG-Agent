@@ -5,6 +5,7 @@ import com.ragagent.model.Conversation;
 import com.ragagent.model.ProductSearchResult;
 import com.ragagent.repository.ConversationRepository;
 import com.ragagent.repository.MessageRepository;
+import com.ragagent.repository.ProductRepository;
 import dev.langchain4j.data.message.AiMessage;
 import dev.langchain4j.data.message.ChatMessage;
 import dev.langchain4j.data.message.SystemMessage;
@@ -77,19 +78,42 @@ public class ChatService {
             - 示例：这款洗面奶非常适合油皮使用 [PRODUCT:p_beauty_001]，价格也很实惠。
 
             ## 加购指令（重要！）
-            当用户表达了"加入购物车"、"加购"、"帮我加这个"、"买这个"等意图时：
-            1. 从对话历史中找到最近推荐的商品（上文出现过的 [PRODUCT:id]）
-            2. 加购格式（数量前加 + 表示增量，不加表示设为总量）：
-               - 默认 1 件：[ADD_TO_CART:商品ID]
-               - 设为总数 3 件：[ADD_TO_CART:商品ID:3]
-               - 再增加 2 件：[ADD_TO_CART:商品ID:+2]
-            3. 语义判断：
-               - "加入购物车"、"加购" → [ADD_TO_CART:p_001]（默认+1）
-               - "要三台"、"买 5 个" → [ADD_TO_CART:p_001:3]（设总量为3）
-               - "再来两台"、"再加 2 个" → [ADD_TO_CART:p_001:+2]（增量+2）
-            4. 如果上文没有推荐过商品，回复："请问您想把哪款商品加入购物车呢？"
-            5. 如果上文推荐了多款商品，且用户没有明确指定要哪一款（如"加入购物车"），必须询问用户想要哪一款并列出候选商品名称，绝不能自行猜测默认选择
-            6. 用户明确指定了（如"加第二个"、"买第一个"）→ 直接执行加购
+            当用户表达了"加入购物车"、"加购"、"帮我加这个"、"买这个"等意图时，按以下流程处理：
+
+            第一步 — 确认商品：
+            - 从对话历史中找到最近推荐的商品（上文出现过的 [PRODUCT:id]）
+            - 如果上文没有推荐过商品，回复："请问您想把哪款商品加入购物车呢？"
+            - 如果上文推荐了多款商品且用户没指定，必须询问用户想要哪一款
+
+            第二步 — 确认规格（关键！）：
+            - 商品库中每个商品都列出了可选规格（见商品信息中的"规格可选"）
+            - 如果用户没有明确说出规格，必须用编号列出选项让用户直接选，格式如下：
+              "这款跑鞋有以下规格可选：
+              1. 38码
+              2. 39码
+              3. 40码
+              4. 41码
+              5. 42码
+              请问您想要哪个？回复编号即可~"
+            - 用户回复数字（如"3"）或文字（如"42码"）都能匹配
+            - 绝对不能用"请问您想要什么规格"这种空泛的问法，必须把编号选项展示出来
+
+            第三步 — 执行加购：
+            - 加购标签格式：[ADD_TO_CART:商品ID:数量:规格标签]
+            - 标签中必须带上用户选择的规格标签（与商品库中"规格可选"一致的文字）
+            - 示例：
+               - [ADD_TO_CART:p_digital_007:1:42码]  → 加购 42码 ×1
+               - [ADD_TO_CART:p_beauty_001:1:50ml 加大装]  → 加购 50ml ×1
+               - [ADD_TO_CART:p_digital_007:3:42码]  → 设为 42码 ×3
+               - [ADD_TO_CART:p_digital_007:+2:42码]  → 增加 2 件 42码
+            - 语义判断：
+               - "加入购物车"、"加购" → 先问规格，确认后 [ADD_TO_CART:id:1:规格]
+               - "要三台"、"买 5 个" → [ADD_TO_CART:id:3:规格]
+               - "再来两台"、"再加 2 个" → [ADD_TO_CART:id:+2:规格]
+            - 用户回复数字编号时，根据第二步展示的编号列表对应规格
+
+            ❌ 错误：[ADD_TO_CART:p_001]（没带规格，会加成默认标准）
+            ✅ 正确：[ADD_TO_CART:p_001:1:40码]（带上了用户选的规格）
 
             ## 用户购物车
             %s
@@ -106,10 +130,12 @@ public class ChatService {
             """;
 
     private static final Pattern PRODUCT_TAG_PATTERN = Pattern.compile("\\[PRODUCT:(\\w+)]");
-    private static final Pattern ADD_TO_CART_PATTERN = Pattern.compile("\\[ADD_TO_CART:(\\w+)(?::(\\d+))?]");
+    private static final Pattern ADD_TO_CART_PATTERN = Pattern.compile("\\[ADD_TO_CART:(\\w+)(?::([+\\d]+))?(?::([^\\]]+))?]");
 
     // SSE 缓冲：累积 LLM token，检测完整 [PRODUCT:id] 后才分类发送
     private final StringBuilder sseBuffer = new StringBuilder();
+    // 当前会话的合法产品 ID（供 SSE 阶段防幻觉）
+    private volatile Set<String> currentValidIds = Set.of();
 
     // 中文口语噪音词（按长度降序，优先匹配长短语）
     private static final String[] NOISE_WORDS = {
@@ -127,6 +153,7 @@ public class ChatService {
     private final CartService cartService;
     private final ConversationRepository conversationRepository;
     private final MessageRepository messageRepo;
+    private final ProductRepository productRepository;
 
     public ChatService(RagConfig ragConfig,
                        RetrieverService retrieverService,
@@ -135,7 +162,8 @@ public class ChatService {
                        ConversationService conversationService,
                        CartService cartService,
                        ConversationRepository conversationRepository,
-                       MessageRepository messageRepo) {
+                       MessageRepository messageRepo,
+                       ProductRepository productRepository) {
         this.ragConfig = ragConfig;
         this.retrieverService = retrieverService;
         this.streamingChatModel = streamingChatModel;
@@ -144,6 +172,7 @@ public class ChatService {
         this.cartService = cartService;
         this.conversationRepository = conversationRepository;
         this.messageRepo = messageRepo;
+        this.productRepository = productRepository;
     }
 
     /**
@@ -178,6 +207,7 @@ public class ChatService {
             Set<String> validIds = products.stream()
                     .map(ProductSearchResult::getProductId)
                     .collect(java.util.stream.Collectors.toSet());
+            this.currentValidIds = validIds;
 
             // ④ Generation: 调用 LLM 流式生成
             log.info("│ 调用 LLM...");
@@ -385,22 +415,64 @@ public class ChatService {
     }
 
     /**
-     * 防幻觉后处理：移除 LLM 编造的不存在的 [PRODUCT:id] 标签
+     * 防幻觉后处理：移除 LLM 编造的不存在的 [PRODUCT:id] 和 [ADD_TO_CART:id] 标签。
+     * 如果 ID 近似匹配（编辑距离≤2），自动修正为正确 ID。
      */
     private String sanitizeProductTags(String reply, Set<String> validProductIds) {
-        Matcher matcher = PRODUCT_TAG_PATTERN.matcher(reply);
+        // 匹配 [PRODUCT:id] 和 [ADD_TO_CART:id:...] 标签
+        Pattern allTagPattern = Pattern.compile("\\[(PRODUCT|ADD_TO_CART):(\\w+)([^\\]]*)]");
+        Matcher matcher = allTagPattern.matcher(reply);
         StringBuffer sb = new StringBuffer();
         while (matcher.find()) {
-            String id = matcher.group(1);
+            String tagType = matcher.group(1);
+            String id = matcher.group(2);
+            String suffix = matcher.group(3);  // :qty:skuLabel 部分
+
             if (validProductIds.contains(id)) {
                 matcher.appendReplacement(sb, Matcher.quoteReplacement(matcher.group()));
             } else {
-                log.warn("检测到幻觉 Product ID: {}，已从回复中移除", id);
-                matcher.appendReplacement(sb, "");
+                // 尝试模糊匹配：找编辑距离最近的 ID
+                String corrected = findClosestId(id, validProductIds);
+                if (corrected != null) {
+                    log.warn("检测到幻觉 ID: {}，已自动修正为: {}", id, corrected);
+                    String replacement = "[" + tagType + ":" + corrected + suffix + "]";
+                    matcher.appendReplacement(sb, Matcher.quoteReplacement(replacement));
+                } else {
+                    log.warn("检测到无法修正的幻觉 ID: {}，已移除标签", id);
+                    matcher.appendReplacement(sb, "");
+                }
             }
         }
         matcher.appendTail(sb);
         return sb.toString();
+    }
+
+    /** 找到编辑距离最近的产品 ID（阈值≤2） */
+    private String findClosestId(String wrongId, Set<String> validIds) {
+        String best = null;
+        int bestDist = 3; // 只修正编辑距离≤2的
+        for (String validId : validIds) {
+            int dist = editDistance(wrongId, validId);
+            if (dist < bestDist) {
+                bestDist = dist;
+                best = validId;
+            }
+        }
+        return best;
+    }
+
+    /** 计算两个字符串的编辑距离 */
+    private int editDistance(String a, String b) {
+        int[][] dp = new int[a.length() + 1][b.length() + 1];
+        for (int i = 0; i <= a.length(); i++) dp[i][0] = i;
+        for (int j = 0; j <= b.length(); j++) dp[0][j] = j;
+        for (int i = 1; i <= a.length(); i++) {
+            for (int j = 1; j <= b.length(); j++) {
+                int cost = a.charAt(i - 1) == b.charAt(j - 1) ? 0 : 1;
+                dp[i][j] = Math.min(Math.min(dp[i - 1][j] + 1, dp[i][j - 1] + 1), dp[i - 1][j - 1] + cost);
+            }
+        }
+        return dp[a.length()][b.length()];
     }
 
     private List<ChatMessage> buildMessages(String sessionId, String systemPrompt, String userMessage) {
@@ -426,8 +498,39 @@ public class ChatService {
                     p.getCategory(),
                     p.getBasePrice(),
                     truncate(p.getMarketingDescription(), 100)));
+
+            // 追加规格信息（SKU）
+            List<Map<String, Object>> skus = productRepository.findSkusByProductId(p.getProductId());
+            if (!skus.isEmpty()) {
+                sb.append("   规格可选：");
+                List<String> specLabels = new ArrayList<>();
+                for (Map<String, Object> sku : skus) {
+                    String props = sku.get("properties") != null ? sku.get("properties").toString() : "{}";
+                    String label = parseSkuLabel(props);
+                    Double price = sku.get("price") instanceof Number ? ((Number) sku.get("price")).doubleValue() : null;
+                    if (price != null && price != p.getBasePrice()) {
+                        specLabels.add(label + "(¥" + String.format("%.0f", price) + ")");
+                    } else {
+                        specLabels.add(label);
+                    }
+                }
+                sb.append(String.join("、", specLabels)).append("\n");
+            }
         }
         return sb.toString();
+    }
+
+    /** 解析 SKU properties JSON 为可读标签 */
+    private String parseSkuLabel(String propsJson) {
+        if (propsJson == null || propsJson.isBlank() || propsJson.equals("{}")) return "标准";
+        try {
+            @SuppressWarnings("unchecked")
+            Map<String, String> props = new com.google.gson.Gson().fromJson(propsJson,
+                    new com.google.gson.reflect.TypeToken<Map<String, String>>() {}.getType());
+            return String.join(" / ", props.values());
+        } catch (Exception e) {
+            return propsJson;
+        }
     }
 
     /** 获取用户购物车内容文本，注入 System Prompt */
@@ -498,9 +601,9 @@ public class ChatService {
 
     // ========== SSE 缓冲发送（技术路线 2.5 节：结构化 JSON） ==========
 
-    /** 匹配 [PRODUCT:id] / [ADD_TO_CART:id:qty] / [DELETE_FROM_CART:id] / [CLEAR_CART] */
+    /** 匹配 [PRODUCT:id] / [ADD_TO_CART:id:qty:skuLabel] / [DELETE_FROM_CART:id] / [CLEAR_CART] */
     private static final Pattern TAG_PATTERN = Pattern.compile(
-            "\\[(PRODUCT|ADD_TO_CART|DELETE_FROM_CART|CLEAR_CART)(?::(\\w+)(?::(\\+?\\d+))?)?]");
+            "\\[(PRODUCT|ADD_TO_CART|DELETE_FROM_CART|CLEAR_CART)(?::(\\w+)(?::([+\\d]+))?(?::([^\\]]+))?)?]");
 
     /**
      * 从缓冲区中检测完整的 [PRODUCT:id] / [ADD_TO_CART:id] 标签，分类发送 SSE 事件。
@@ -508,6 +611,9 @@ public class ChatService {
      */
     private void flushSseBuffer(SseEmitter emitter) throws java.io.IOException {
         String buf = sseBuffer.toString();
+        if (buf.contains("[ADD") || buf.contains("[PROD")) {
+            log.info("  flushSseBuffer | buf=\"{}\" | len={}", buf, buf.length());
+        }
 
         // ① 查找完整的标签
         Matcher m = TAG_PATTERN.matcher(buf);
@@ -517,8 +623,22 @@ public class ChatService {
             String id = m.group(2);
             String before = buf.substring(lastEnd, m.start());
             emitTokens(emitter, before);
+
+            // 防幻觉：修正错误的产品 ID
+            if (id != null && !currentValidIds.contains(id)) {
+                log.warn("SSE 阶段检测到未知 ID: {}，尝试模糊匹配... (validIds={})", id, currentValidIds);
+                String corrected = findClosestId(id, currentValidIds);
+                if (corrected != null) {
+                    log.warn("SSE 阶段修正幻觉 ID: {} → {}", id, corrected);
+                    id = corrected;
+                } else {
+                    log.warn("SSE 阶段无法修正 ID: {}", id);
+                }
+            }
+
             if ("ADD_TO_CART".equals(tagType)) {
                 String qtyStr = m.group(3);
+                String skuLabel = m.group(4);  // 规格标签，如 "40码"
                 int qty;
                 String mode;
                 if (qtyStr == null) {
@@ -531,10 +651,11 @@ public class ChatService {
                     qty = Integer.parseInt(qtyStr);
                     mode = "set";
                 }
+                String skuJson = skuLabel != null ? ",\"skuLabel\":\"" + skuLabel.trim() + "\"" : "";
                 emitter.send(SseEmitter.event().data(
                         "{\"type\":\"add_to_cart\",\"productId\":\"" + id +
-                        "\",\"quantity\":" + qty + ",\"mode\":\"" + mode + "\"}"));
-                log.debug("  SSE → add_to_cart: {} {} {}", id, qty, mode);
+                        "\",\"quantity\":" + qty + ",\"mode\":\"" + mode + "\"" + skuJson + "}"));
+                log.debug("  SSE → add_to_cart: {} {} {} skuLabel={}", id, qty, mode, skuLabel);
             } else if ("DELETE_FROM_CART".equals(tagType)) {
                 emitter.send(SseEmitter.event().data(
                         "{\"type\":\"delete_from_cart\",\"cartItemId\":" + id + "}"));
@@ -598,8 +719,8 @@ public class ChatService {
             return true;
         }
 
-        // ② body 已包含完整关键词且带参数字段
-        return body.matches("(PRODUCT|ADD_TO_CART|DELETE_FROM_CART):\\w*(:\\+?\\d*)?")
+        // ② body 已包含完整关键词且带参数字段（ADD_TO_CART 可能有 skuLabel）
+        return body.matches("(PRODUCT|ADD_TO_CART|DELETE_FROM_CART):\\w*(:\\+?\\d*)?(:[^\\]]*)?")
                 || body.equals("CLEAR_CART");
     }
 

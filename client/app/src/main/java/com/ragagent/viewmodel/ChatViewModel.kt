@@ -42,9 +42,11 @@ class ChatViewModel : ViewModel() {
 
     private var streamJob: Job? = null
 
-    fun addToCart(productId: String, quantity: Int = 1) {
+    fun addToCart(productId: String, quantity: Int = 1, skuLabel: String? = null) {
         viewModelScope.launch {
-            val item = apiService.addToCart(sessionId, productId, null, null, quantity)
+            android.util.Log.d("CartDebug", "addToCart called: productId=$productId, qty=$quantity, skuLabel=$skuLabel, sessionId=$sessionId")
+            val item = apiService.addToCart(sessionId, productId, null, skuLabel, quantity)
+            android.util.Log.d("CartDebug", "addToCart result: ${item?.id}, title=${item?.productTitle}, sku=${item?.skuLabel}")
             if (item != null) {
                 _cartCount.value = _cartCount.value + quantity
             }
@@ -94,14 +96,8 @@ class ChatViewModel : ViewModel() {
                             removeLoading()
                             loadingRemoved = true
                         }
-                        if (event.mode == "set") {
-                            viewModelScope.launch {
-                                apiService.setCartQuantity(sessionId, event.productId, event.quantity)
-                                refreshCartCount()
-                            }
-                        } else {
-                            addToCart(event.productId, event.quantity)
-                        }
+                        // 统一走 addToCart（传 skuLabel），后端自动处理加购/设量
+                        addToCart(event.productId, event.quantity, event.skuLabel)
                     }
                     is SseEvent.DeleteFromCart -> {
                         if (!loadingRemoved) {

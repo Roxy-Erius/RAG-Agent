@@ -51,9 +51,21 @@ public class CartRepository {
     }
 
     public CartItem add(String sessionId, String productId, String skuId, String skuLabel, int quantity) {
-        List<CartItem> existing = jdbc.query(
-                "SELECT * FROM cart_items WHERE session_id = ? AND product_id = ? AND ((sku_id = ?) OR (sku_id IS NULL AND ? IS NULL))",
-                PLAIN_MAPPER, sessionId, productId, skuId, skuId);
+        // 优先按 sku_id 匹配，其次按 sku_label 匹配（兼容 agent 加购场景）
+        List<CartItem> existing;
+        if (skuId != null) {
+            existing = jdbc.query(
+                    "SELECT * FROM cart_items WHERE session_id = ? AND product_id = ? AND sku_id = ?",
+                    PLAIN_MAPPER, sessionId, productId, skuId);
+        } else if (skuLabel != null && !skuLabel.isBlank()) {
+            existing = jdbc.query(
+                    "SELECT * FROM cart_items WHERE session_id = ? AND product_id = ? AND sku_label = ?",
+                    PLAIN_MAPPER, sessionId, productId, skuLabel);
+        } else {
+            existing = jdbc.query(
+                    "SELECT * FROM cart_items WHERE session_id = ? AND product_id = ? AND sku_id IS NULL AND sku_label IS NULL",
+                    PLAIN_MAPPER, sessionId, productId);
+        }
         if (!existing.isEmpty()) {
             CartItem item = existing.get(0);
             jdbc.update("UPDATE cart_items SET quantity = quantity + ? WHERE id = ?",
@@ -110,9 +122,20 @@ public class CartRepository {
     }
 
     public CartItem add(String sessionId, Long userId, String productId, String skuId, String skuLabel, int quantity) {
-        List<CartItem> existing = jdbc.query(
-                "SELECT * FROM cart_items WHERE user_id = ? AND product_id = ? AND ((sku_id = ?) OR (sku_id IS NULL AND ? IS NULL))",
-                PLAIN_MAPPER, userId, productId, skuId, skuId);
+        List<CartItem> existing;
+        if (skuId != null) {
+            existing = jdbc.query(
+                    "SELECT * FROM cart_items WHERE user_id = ? AND product_id = ? AND sku_id = ?",
+                    PLAIN_MAPPER, userId, productId, skuId);
+        } else if (skuLabel != null && !skuLabel.isBlank()) {
+            existing = jdbc.query(
+                    "SELECT * FROM cart_items WHERE user_id = ? AND product_id = ? AND sku_label = ?",
+                    PLAIN_MAPPER, userId, productId, skuLabel);
+        } else {
+            existing = jdbc.query(
+                    "SELECT * FROM cart_items WHERE user_id = ? AND product_id = ? AND sku_id IS NULL AND sku_label IS NULL",
+                    PLAIN_MAPPER, userId, productId);
+        }
         if (!existing.isEmpty()) {
             CartItem item = existing.get(0);
             jdbc.update("UPDATE cart_items SET quantity = quantity + ? WHERE id = ?",
