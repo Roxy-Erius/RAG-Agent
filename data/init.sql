@@ -67,16 +67,70 @@ CREATE TABLE product_reviews (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='用户评论表';
 
 -- =============================================
--- 购物车表（加分项）
+-- 购物车表
 -- =============================================
 CREATE TABLE cart_items (
     id BIGINT AUTO_INCREMENT PRIMARY KEY,
-    session_id VARCHAR(50) NOT NULL COMMENT '会话ID',
+    session_id VARCHAR(50) COMMENT '匿名会话ID',
+    user_id BIGINT COMMENT '登录用户ID',
     product_id VARCHAR(50) NOT NULL COMMENT '商品ID',
+    sku_id VARCHAR(100) COMMENT 'SKU ID',
+    sku_label VARCHAR(500) COMMENT '规格标签',
     quantity INT DEFAULT 1 COMMENT '数量',
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (product_id) REFERENCES products(product_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='购物车表';
+
+-- =============================================
+-- 用户表
+-- =============================================
+CREATE TABLE IF NOT EXISTS users (
+    id BIGINT AUTO_INCREMENT PRIMARY KEY,
+    username VARCHAR(50) NOT NULL UNIQUE,
+    password_hash VARCHAR(200) NOT NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='用户表';
+
+-- =============================================
+-- 会话表
+-- =============================================
+CREATE TABLE IF NOT EXISTS conversations (
+    id BIGINT AUTO_INCREMENT PRIMARY KEY,
+    user_id BIGINT NOT NULL,
+    conversation_id VARCHAR(36) NOT NULL UNIQUE,
+    title VARCHAR(100),
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    INDEX idx_user_id (user_id),
+    INDEX idx_conversation_id (conversation_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='会话表';
+
+-- =============================================
+-- 消息表
+-- =============================================
+CREATE TABLE IF NOT EXISTS messages (
+    id BIGINT AUTO_INCREMENT PRIMARY KEY,
+    conversation_id BIGINT NOT NULL,
+    role VARCHAR(10) NOT NULL COMMENT 'user / ai',
+    content TEXT,
+    product_ids VARCHAR(500) COMMENT 'JSON数组: ["p_digital_007"]',
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    INDEX idx_conv_id (conversation_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='消息表';
+
+-- =============================================
+-- 用户行为表
+-- =============================================
+CREATE TABLE IF NOT EXISTS user_behaviors (
+    id BIGINT AUTO_INCREMENT PRIMARY KEY,
+    user_id BIGINT NOT NULL,
+    product_id VARCHAR(50) NOT NULL,
+    action_type VARCHAR(20) NOT NULL COMMENT 'VIEW / CART / PURCHASE',
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    INDEX idx_user_id (user_id),
+    INDEX idx_action_type (action_type),
+    INDEX idx_created_at (created_at)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='用户行为表';
 
 -- =============================================
 -- 索引
