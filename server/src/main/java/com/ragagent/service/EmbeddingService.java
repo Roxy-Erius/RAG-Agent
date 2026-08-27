@@ -16,116 +16,136 @@ import java.net.http.HttpResponse;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.Duration;
+import java.util.ArrayList;
 import java.util.Base64;
+import java.util.List;
 
+
+
+/**
+ * 本地 Embedding 服务客户端
+ *
+ * <p>调用本地 Python 服务（FastAPI + Chinese-CLIP），
+ * 替代原火山引擎 doubao-embedding-vision 多模态 embedding。
+ *
+ * <p>API 设计见 docs/Day16-本地多模态Embedding服务.md §5.1
+ *   - POST /embed/text     {"text":"..."}       → {"vector":[...], "dim":N}
+ *   - POST /embed/image    {"image_base64":"...","mime_type":"jpeg"} → {"vector":[...], "dim":N}
+ *   - POST /embed/batch    {"texts":["a","b"]}  → {"vectors":[[...],[...]], "dim":N}
+ */
 @Service
 public class EmbeddingService {
 
     private static final Logger log = LoggerFactory.getLogger(EmbeddingService.class);
-    private static final int MAX_RETRIES = 3;
 
-    @Value("${volcengine.base-url}")
+    @Value("${embedding.base-url}")
     private String baseUrl;
 
-    @Value("${volcengine.embedding.api-key}")
+    @Value("${embedding.api-key}")
     private String apiKey;
 
-    @Value("${volcengine.embedding.model}")
+    @Value("${embedding.model}")
     private String model;
 
     private final HttpClient httpClient = HttpClient.newBuilder()
+            .version(HttpClient.Version.HTTP_1_1)   // 强制 HTTP/1.1：uvicorn 不支持 h2c upgrade
             .connectTimeout(Duration.ofSeconds(30))
             .build();
     private final Gson gson = new Gson();
 
+    /** 文本向量化 */
     public float[] embedText(String text) {
-        JsonObject item = new JsonObject();
-        item.addProperty("type", "text");
-        item.addProperty("text", text);
+        JsonObject body = new JsonObject();
+        body.addProperty("text", text);
 
-        JsonArray input = new JsonArray();
-        input.add(item);
-
-        return callApi(input);
+        return parseSingleVector(send(buildPost("/embed/text", body.toString())));
     }
 
+    /** 批量文本向量化（用于索引阶段加速） */
+    public List<float[]> embedBatch(List<String> texts) {
+        JsonObject body = new JsonObject();
+        JsonArray arr = new JsonArray();
+        for (String t : texts) arr.add(t);
+        body.add("texts", arr);
+
+        // 批量任务放宽超时到 120s
+        HttpRequest.Builder builder = buildPost("/embed/batch", body.toString())
+                .timeout(Duration.ofSeconds(120));
+
+        String respBody = send(builder);
+        try {
+            JsonObject resp = gson.fromJson(respBody, JsonObject.class);
+            JsonArray vectors = resp.getAsJsonArray("vectors");
+            List<float[]> result = new ArrayList<>(vectors.size());
+            for (int i = 0; i < vectors.size(); i++) {
+                JsonArray vecArr = vectors.get(i).getAsJsonArray();
+                float[] vec = new float[vecArr.size()];
+                for (int j = 0; j < vec.length; j++) {
+                    vec[j] = vecArr.get(j).getAsFloat();
+                }
+                result.add(vec);
+            }
+            return result;
+        } catch (Exception e) {
+            throw new RuntimeException("Embedding /embed/batch 响应解析失败: " + e.getMessage(), e);
+        }
+    }
+
+    /** 图片向量化（base64 上传） */
     public float[] embedImage(String imagePath) {
         try {
             byte[] bytes = Files.readAllBytes(Path.of(imagePath));
             String base64 = Base64.getEncoder().encodeToString(bytes);
-            String mime = imagePath.endsWith(".png") ? "image/png" : "image/jpeg";
+            String mime = imagePath.toLowerCase().endsWith(".png") ? "image/png" : "image/jpeg";
 
-            JsonObject imageUrl = new JsonObject();
-            imageUrl.addProperty("url", "data:" + mime + ";base64," + base64);
+            JsonObject body = new JsonObject();
+            body.addProperty("image_base64", base64);
+            body.addProperty("mime_type", mime);
 
-            JsonObject item = new JsonObject();
-            item.addProperty("type", "image_url");
-            item.add("image_url", imageUrl);
-
-            JsonArray input = new JsonArray();
-            input.add(item);
-
-            return callApi(input);
+            return parseSingleVector(send(buildPost("/embed/image", body.toString())));
         } catch (IOException e) {
             log.error("读取图片失败: {}", imagePath, e);
             throw new RuntimeException("图片读取失败: " + imagePath, e);
         }
     }
 
-    private float[] callApi(JsonArray input) {
-        JsonObject body = new JsonObject();
-        body.addProperty("model", model);
-        body.add("input", input);
+    // ==================== 内部工具 ====================
 
-        String json = gson.toJson(body);
+    private HttpRequest.Builder buildPost(String path, String jsonBody) {
+        return HttpRequest.newBuilder()
+                .uri(URI.create(baseUrl + path))
+                .header("Content-Type", "application/json")
+                .header("Authorization", "Bearer " + apiKey)   // 本地服务不校验，保留兼容
+                .POST(HttpRequest.BodyPublishers.ofString(jsonBody))
+                .timeout(Duration.ofSeconds(30));
+    }
 
-        for (int attempt = 1; attempt <= MAX_RETRIES; attempt++) {
-            try {
-                HttpRequest request = HttpRequest.newBuilder()
-                        .uri(URI.create(baseUrl + "/embeddings/multimodal"))
-                        .header("Content-Type", "application/json")
-                        .header("Authorization", "Bearer " + apiKey)
-                        .POST(HttpRequest.BodyPublishers.ofString(json))
-                        .timeout(Duration.ofSeconds(60))
-                        .build();
+    private String send(HttpRequest.Builder requestBuilder) {
+        HttpRequest request = requestBuilder.build();
+        try {
+            HttpResponse<String> response = httpClient.send(request, HttpResponse.BodyHandlers.ofString());
 
-                HttpResponse<String> response = httpClient.send(request, HttpResponse.BodyHandlers.ofString());
-
-                if (response.statusCode() != 200) {
-                    log.warn("Embedding API 返回 {}: {}", response.statusCode(), response.body());
-                    if (attempt < MAX_RETRIES) {
-                        Thread.sleep(1000L * attempt);
-                        continue;
-                    }
-                    throw new RuntimeException("Embedding API 失败, status=" + response.statusCode());
-                }
-
-                JsonObject resp = gson.fromJson(response.body(), JsonObject.class);
-                JsonArray embArray = resp.getAsJsonObject("data")
-                        .getAsJsonArray("embedding");
-
-                float[] result = new float[embArray.size()];
-                for (int i = 0; i < result.length; i++) {
-                    result[i] = embArray.get(i).getAsFloat();
-                }
-                return result;
-
-            } catch (InterruptedException e) {
-                Thread.currentThread().interrupt();
-                throw new RuntimeException("Embedding API 被中断", e);
-            } catch (IOException e) {
-                log.warn("Embedding API 异常, 第 {} 次: {}", attempt, e.getMessage());
-                if (attempt == MAX_RETRIES) {
-                    throw new RuntimeException("Embedding API 失败，已重试 " + MAX_RETRIES + " 次", e);
-                }
-                try {
-                    Thread.sleep(1000L * attempt);
-                } catch (InterruptedException ie) {
-                    Thread.currentThread().interrupt();
-                    throw new RuntimeException("重试等待被中断", ie);
-                }
+            if (response.statusCode() != 200) {
+                log.error("Embedding API 返回 {}: {}", response.statusCode(), response.body());
+                throw new RuntimeException("Embedding API 失败, status=" + response.statusCode());
             }
+            return response.body();
+        } catch (IOException e) {
+            log.error("Embedding API 网络异常: {}", e.getMessage());
+            throw new RuntimeException("Embedding API 通信失败: " + e.getMessage(), e);
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            throw new RuntimeException("Embedding API 被中断", e);
         }
-        throw new RuntimeException("Embedding API 失败");
+    }
+
+    private float[] parseSingleVector(String respBody) {
+        JsonObject resp = gson.fromJson(respBody, JsonObject.class);
+        JsonArray vecArr = resp.getAsJsonArray("vector");
+        float[] result = new float[vecArr.size()];
+        for (int i = 0; i < result.length; i++) {
+            result[i] = vecArr.get(i).getAsFloat();
+        }
+        return result;
     }
 }

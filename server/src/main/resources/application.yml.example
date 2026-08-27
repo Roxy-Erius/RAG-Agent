@@ -15,17 +15,22 @@ chromadb:
   url: http://服务器IP:8000
   collection-name: products
 
-# ==================== 火山引擎 API 配置 ====================
+# ==================== Chat 模型配置 ====================
+# 当前用阿里云百炼（DashScope）OpenAI 兼容协议
+# 详见 https://bailian.console.aliyun.com/  申请 sk- 开头的 API key
 volcengine:
-  base-url: https://ark.cn-beijing.volces.com/api/v3
-  # Chat 模型
   chat:
-    api-key: 你的chat模型API_KEY
-    model-id: 你的chat模型endpoint-id
-  # Embedding 模型
-  embedding:
-    api-key: 你的embedding模型API_KEY
-    model: doubao-embedding-vision-251215
+    base-url: https://dashscope.aliyuncs.com/compatible-mode
+    api-key: 你的百炼API_KEY         # sk- 开头
+    model-id: qwen-max                # 或 qwen-turbo / qwen-plus / qwen-max-latest
+
+# ==================== 本地 Embedding 配置 ====================
+# 需要先启动 server/embedding-service/start.bat（端口 8001）
+# 详见 docs/Day16-本地多模态Embedding服务.md
+embedding:
+  base-url: http://localhost:8001
+  api-key: not-needed                # 占位，本地服务不校验
+  model: chinese-clip-vit-base-patch16
 
 # ==================== RAG 参数 ====================
 rag:

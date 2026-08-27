@@ -29,6 +29,8 @@ public class KnowledgeIndexer implements CommandLineRunner {
     private static final Logger log = LoggerFactory.getLogger(KnowledgeIndexer.class);
     private static final String TEXT_COLLECTION = "products_text";
     private static final String IMAGE_COLLECTION = "products_image";
+    // 与本地 Embedding 服务的模型维度一致（chinese-clip-vit-base-patch16 = 512）
+    private static final int EMBEDDING_DIM = 512;
 
     private final ProductRepository productRepository;
     private final EmbeddingService embeddingService;
@@ -155,11 +157,12 @@ public class KnowledgeIndexer implements CommandLineRunner {
 
     private boolean collectionHasData(String collectionId) {
         try {
-            // 查询一条数据来判断是否有数据
+            // 用一条零向量查询来判断 collection 是否有数据
+            // 维度必须与索引时一致（旧代码硬编码 2048 与新模型 512 不匹配会导致每次重启误判为空、重新索引）
             JsonObject body = new JsonObject();
             JsonArray queryEmbeddings = new JsonArray();
             JsonArray dummyEmb = new JsonArray();
-            for (int i = 0; i < 2048; i++) dummyEmb.add(0.1f);
+            for (int i = 0; i < EMBEDDING_DIM; i++) dummyEmb.add(0.0f);
             queryEmbeddings.add(dummyEmb);
             body.add("query_embeddings", queryEmbeddings);
             body.addProperty("n_results", 1);

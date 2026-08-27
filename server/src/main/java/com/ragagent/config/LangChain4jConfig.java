@@ -10,8 +10,7 @@ import java.time.Duration;
 @Configuration
 public class LangChain4jConfig {
 
-    @Value("${volcengine.base-url}")
-    private String baseUrl;
+    // Note: volcengine.base-url 已废弃，chat 走 chat.base-url，embedding 走 embedding.base-url（重构见 Day16 PRD）
 
     @Value("${volcengine.chat.api-key}")
     private String apiKey;
@@ -19,10 +18,13 @@ public class LangChain4jConfig {
     @Value("${volcengine.chat.model-id}")
     private String modelId;
 
+    @Value("${volcengine.chat.base-url}")
+    private String chatBaseUrl;
+
     @Bean
     public OpenAiStreamingChatModel streamingChatModel() {
         return OpenAiStreamingChatModel.builder()
-                .baseUrl(baseUrl)
+                .baseUrl(chatBaseUrl)
                 .apiKey(apiKey)
                 .modelName(modelId)
                 .temperature(0.7)

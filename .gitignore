@@ -16,6 +16,12 @@ server/target/
 *.jar
 *.war
 
+# ==================== Python Embedding 服务 ====================
+server/embedding-service/models/
+server/embedding-service/venv/
+server/embedding-service/__pycache__/
+server/embedding-service/*.pyc
+
 # ==================== Android 构建产物 ====================
 client/**/build/
 *.apk
