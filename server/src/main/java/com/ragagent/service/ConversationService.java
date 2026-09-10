@@ -59,10 +59,13 @@ public class ConversationService {
     }
 
     /**
-     * 获取用户的所有会话列表
+     * 获取用户的所有会话列表，支持按关键词搜索（标题/消息内容）
      */
-    public List<Conversation> listConversations(Long userId) {
-        return conversationRepo.findByUserId(userId);
+    public List<Conversation> listConversations(Long userId, String keyword) {
+        if (keyword == null || keyword.isBlank()) {
+            return conversationRepo.findByUserId(userId);
+        }
+        return conversationRepo.search(userId, keyword.trim());
     }
 
     /**

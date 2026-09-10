@@ -27,16 +27,17 @@ public class ConversationController {
     }
 
     /**
-     * GET /api/conversations — 获取当前用户的会话列表
+     * GET /api/conversations — 获取当前用户的会话列表，支持 ?q= 按标题/内容搜索
      */
     @GetMapping
-    public ResponseEntity<?> list(HttpServletRequest request) {
+    public ResponseEntity<?> list(HttpServletRequest request,
+                                  @RequestParam(name = "q", required = false) String q) {
         Long userId = jwtAuthFilter.getUserId(request);
         if (userId == null) {
             return ResponseEntity.status(401).body(Map.of("error", "请先登录"));
         }
-        log.info("==> GET /api/conversations | userId={}", userId);
-        List<Conversation> conversations = conversationService.listConversations(userId);
+        log.info("==> GET /api/conversations | userId={} | q={}", userId, q);
+        List<Conversation> conversations = conversationService.listConversations(userId, q);
         return ResponseEntity.ok(conversations);
     }
 

@@ -2,6 +2,8 @@ package com.ragagent.ui
 
 import android.content.Intent
 import android.os.Bundle
+import android.text.Editable
+import android.text.TextWatcher
 import android.view.View
 import android.widget.Toast
 import androidx.appcompat.app.AlertDialog
@@ -12,6 +14,8 @@ import com.ragagent.auth.AuthManager
 import com.ragagent.databinding.ActivityHistoryBinding
 import com.ragagent.network.ApiService
 import com.ragagent.network.ApiService.ConversationDto
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
 class HistoryActivity : AppCompatActivity() {
@@ -19,6 +23,7 @@ class HistoryActivity : AppCompatActivity() {
     private lateinit var binding: ActivityHistoryBinding
     private val apiService = ApiService()
     private val conversations = mutableListOf<ConversationDto>()
+    private var searchJob: Job? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -73,6 +78,19 @@ class HistoryActivity : AppCompatActivity() {
             }
         )
 
+        // 搜索框：300ms 防抖后重新加载
+        binding.etSearch.addTextChangedListener(object : TextWatcher {
+            override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) {}
+            override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) {}
+            override fun afterTextChanged(s: Editable?) {
+                searchJob?.cancel()
+                searchJob = lifecycleScope.launch {
+                    delay(300)
+                    loadConversations()
+                }
+            }
+        })
+
         updateAuthUI()
         loadConversations()
     }
@@ -98,10 +116,13 @@ class HistoryActivity : AppCompatActivity() {
             binding.cardLoggedIn.visibility = View.VISIBLE
             binding.tvUsername.text = AuthManager.getUsername() ?: "用户"
             binding.divider.visibility = View.VISIBLE
+            binding.etSearch.visibility = View.VISIBLE
         } else {
             binding.cardNotLoggedIn.visibility = View.VISIBLE
             binding.cardLoggedIn.visibility = View.GONE
             binding.divider.visibility = View.GONE
+            binding.etSearch.visibility = View.GONE
+            binding.etSearch.setText("")
             conversations.clear()
             binding.recyclerHistory.adapter?.notifyDataSetChanged()
             updateEmptyState()
@@ -111,7 +132,8 @@ class HistoryActivity : AppCompatActivity() {
     private fun loadConversations() {
         if (!AuthManager.isLoggedIn()) return
         lifecycleScope.launch {
-            val list = apiService.getConversations()
+            val query = binding.etSearch.text?.toString()
+            val list = apiService.getConversations(query)
             conversations.clear()
             conversations.addAll(list)
             binding.recyclerHistory.adapter?.notifyDataSetChanged()
@@ -120,8 +142,12 @@ class HistoryActivity : AppCompatActivity() {
     }
 
     private fun updateEmptyState() {
-        binding.tvEmpty.visibility = if (conversations.isEmpty())
-            View.VISIBLE else View.GONE
+        val show = conversations.isEmpty()
+        binding.tvEmpty.visibility = if (show) View.VISIBLE else View.GONE
+        if (show) {
+            binding.tvEmpty.text = if (!binding.etSearch.text.isNullOrBlank())
+                "未找到匹配的历史会话" else "暂无历史会话\n登录后开始对话即可自动保存"
+        }
     }
 
     companion object {

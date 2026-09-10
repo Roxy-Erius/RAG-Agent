@@ -8,3 +8,6 @@ class RagAgentApp : Application() {
         com.ragagent.auth.AuthManager.init(this)
     }
 }
+
+
+//不要小米的可以吗

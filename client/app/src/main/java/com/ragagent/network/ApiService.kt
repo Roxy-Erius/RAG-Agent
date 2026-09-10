@@ -338,20 +338,26 @@ class ApiService {
         val createdAt: String?
     )
 
-    suspend fun getConversations(): List<ConversationDto> = withContext(Dispatchers.IO) {
-        try {
-            val request = Request.Builder()
-                .url("$baseUrl/api/conversations")
-                .build()
-            val response = client.newCall(request).execute()
-            if (response.isSuccessful) {
-                val json = response.body?.string() ?: "[]"
-                val type = com.google.gson.reflect.TypeToken.getParameterized(
-                    List::class.java, ConversationDto::class.java).type
-                gson.fromJson(json, type)
-            } else emptyList()
-        } catch (e: Exception) { emptyList() }
-    }
+    suspend fun getConversations(query: String? = null): List<ConversationDto> =
+        withContext(Dispatchers.IO) {
+            try {
+                val url = if (query.isNullOrBlank()) {
+                    "$baseUrl/api/conversations"
+                } else {
+                    "$baseUrl/api/conversations?q=${java.net.URLEncoder.encode(query, "UTF-8")}"
+                }
+                val request = Request.Builder()
+                    .url(url)
+                    .build()
+                val response = client.newCall(request).execute()
+                if (response.isSuccessful) {
+                    val json = response.body?.string() ?: "[]"
+                    val type = com.google.gson.reflect.TypeToken.getParameterized(
+                        List::class.java, ConversationDto::class.java).type
+                    gson.fromJson(json, type)
+                } else emptyList()
+            } catch (e: Exception) { emptyList() }
+        }
 
     suspend fun getConversationMessages(conversationId: String): List<MessageDto> =
         withContext(Dispatchers.IO) {

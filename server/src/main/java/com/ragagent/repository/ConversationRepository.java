@@ -92,6 +92,19 @@ public class ConversationRepository {
                 ROW_MAPPER, userId);
     }
 
+    /**
+     * 按关键词搜索用户的会话：标题或消息内容包含关键词。
+     */
+    public List<Conversation> search(Long userId, String keyword) {
+        String like = "%" + keyword.trim() + "%";
+        return jdbc.query("""
+            SELECT DISTINCT c.* FROM conversations c
+            LEFT JOIN messages m ON m.conversation_id = c.id
+            WHERE c.user_id = ? AND (c.title LIKE ? OR IFNULL(m.content, '') LIKE ?)
+            ORDER BY c.updated_at DESC
+            """, ROW_MAPPER, userId, like, like);
+    }
+
     public void updateTimestamp(Long id) {
         jdbc.update("UPDATE conversations SET updated_at = ? WHERE id = ?",
                 new Timestamp(System.currentTimeMillis()), id);
