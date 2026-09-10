@@ -48,6 +48,20 @@ public class ProductRepository {
         return jdbc.query("SELECT * FROM products", ROW_MAPPER);
     }
 
+    /** 分页查询商品列表 */
+    public List<Product> findAllPaginated(int page, int size) {
+        int offset = (page - 1) * size;
+        return jdbc.query(
+                "SELECT * FROM products ORDER BY product_id LIMIT ? OFFSET ?",
+                ROW_MAPPER, size, offset);
+    }
+
+    /** 商品总数 */
+    public int count() {
+        Integer total = jdbc.queryForObject("SELECT COUNT(*) FROM products", Integer.class);
+        return total != null ? total : 0;
+    }
+
     public List<Map<String, Object>> findSkusByProductId(String productId) {
         return jdbc.queryForList(
                 "SELECT sku_id, product_id, properties, price FROM product_skus WHERE product_id = ?",

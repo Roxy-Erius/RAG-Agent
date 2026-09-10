@@ -15,6 +15,7 @@ import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.Base64;
@@ -115,8 +116,8 @@ public class EmbeddingService {
         return HttpRequest.newBuilder()
                 .uri(URI.create(baseUrl + path))
                 .header("Content-Type", "application/json")
-                .header("Authorization", "Bearer " + apiKey)   // 本地服务不校验，保留兼容
-                .POST(HttpRequest.BodyPublishers.ofString(jsonBody))
+                .header("Authorization", "Bearer " + apiKey)   // 占位校验，实际未用
+                .POST(HttpRequest.BodyPublishers.ofString(jsonBody, StandardCharsets.UTF_8))
                 .timeout(Duration.ofSeconds(30));
     }
 

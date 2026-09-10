@@ -10,6 +10,7 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.Arrays;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
@@ -27,6 +28,23 @@ public class ProductController {
         this.productRepository = productRepository;
         this.retrieverService = retrieverService;
         this.imageService = imageService;
+    }
+
+    @GetMapping
+    public ResponseEntity<Map<String, Object>> listProducts(
+            @RequestParam(defaultValue = "1") int page,
+            @RequestParam(defaultValue = "20") int size) {
+        log.debug("GET /api/products | page={} size={}", page, size);
+        List<Product> products = productRepository.findAllPaginated(page, size);
+        imageService.fillImages(products);
+        int total = productRepository.count();
+        return ResponseEntity.ok(Map.of(
+                "items", products,
+                "total", total,
+                "page", page,
+                "size", size,
+                "totalPages", (int) Math.ceil((double) total / size)
+        ));
     }
 
     @GetMapping("/{id}")

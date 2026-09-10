@@ -9,6 +9,7 @@ import org.springframework.web.bind.MissingServletRequestParameterException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
+import org.springframework.web.servlet.resource.NoResourceFoundException;
 
 import java.time.LocalDateTime;
 import java.util.Map;
@@ -56,11 +57,22 @@ public class GlobalExceptionHandler {
         ));
     }
 
+    // 静态资源缺失（如 /favicon.ico）→ 404，不污染成 500
+    @ExceptionHandler(NoResourceFoundException.class)
+    public ResponseEntity<Map<String, Object>> handleNoResource(NoResourceFoundException e) {
+        log.warn("静态资源不存在: {}", e.getResourcePath());
+        return ResponseEntity.status(HttpStatus.NOT_FOUND).body(Map.of(
+                "error", "not found",
+                "status", 404,
+                "timestamp", LocalDateTime.now().toString()
+        ));
+    }
+
     @ExceptionHandler(Exception.class)
     public ResponseEntity<Map<String, Object>> handleGeneral(Exception e) {
-        log.error("未处理异常", e);
+        log.error("δ�����쳣", e);
         return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(Map.of(
-                "error", "服务器内部错误，请稍后重试",
+                "error", "�������ڲ��������Ժ�����",
                 "status", 500,
                 "timestamp", LocalDateTime.now().toString()
         ));

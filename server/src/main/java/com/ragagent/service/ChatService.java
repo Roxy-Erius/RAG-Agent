@@ -189,7 +189,7 @@ public class ChatService {
             String cleaned = preprocessQuery(userMessage);
             String retrievalQuery = augmentQuery(sessionId, cleaned);
             log.info("│ 预处理: \"{}\" → \"{}\"", userMessage, retrievalQuery);
-            List<ProductSearchResult> products = retrieverService.retrieveProductsByText(retrievalQuery, ragConfig.getTopK(), null);
+            List<ProductSearchResult> products = retrieverService.retrieveProductsMultiModal(retrievalQuery, ragConfig.getTopK(), null);
             log.info("│ 检索结果: {} 条 | ids={}",
                     products.size(),
                     products.stream().map(ProductSearchResult::getProductId).toList());
@@ -279,7 +279,7 @@ public class ChatService {
     public String chat(String sessionId, String conversationId, Long userId, String userMessage) {
         String cleaned = preprocessQuery(userMessage);
         String retrievalQuery = augmentQuery(sessionId, cleaned);
-        List<ProductSearchResult> products = retrieverService.retrieveProductsByText(retrievalQuery, ragConfig.getTopK(), null);
+        List<ProductSearchResult> products = retrieverService.retrieveProductsMultiModal(retrievalQuery, ragConfig.getTopK(), null);
         String context = formatProducts(products);
         String cartInfo = formatCart(sessionId, userId);
         String userProfile = formatUserProfile(userId);

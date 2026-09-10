@@ -29,6 +29,11 @@ public class RetrieverService {
     private static final double TEXT_WEIGHT = 0.7;
     private static final double IMAGE_WEIGHT = 0.3;
     private static final int RRF_K = 60;
+    // 多模态融合权重：text→text : text→image（CLIP 跨模态）
+    // 评测调优结论：图像通道权重更高效果更好（CLIP 图像 embedding 区分度 > 文本塔）
+    private static final double MM_TEXT_WEIGHT = 0.3;
+    private static final double MM_IMAGE_WEIGHT = 0.7;
+    private static final int MM_POOL_MULT = 4;
 
     private final RagConfig ragConfig;
     private final EmbeddingService embeddingService;
@@ -161,6 +166,87 @@ public class RetrieverService {
                     if (p == null) return null;
                     return new ProductSearchResult(
                             p.getProductId(), r.score, p.getTitle(), p.getBrand(),
+                            p.getCategory(), p.getSubCategory(),
+                            p.getBasePrice().doubleValue(),
+                            p.getImagePath(), p.getMarketingDescription());
+                })
+                .filter(Objects::nonNull)
+                .toList();
+    }
+
+    /**
+     * 多模态融合检索：text→text（CLIP 文本塔） + text→image（CLIP 跨模态，用文本编码查询图像 collection）。
+     * 用 RRF 融合两路结果。这才是让图文对齐模型发挥作用的用法。
+     */
+    public List<ProductSearchResult> retrieveProductsMultiModal(String query, int topK, String category) {
+        return retrieveProductsMultiModal(query, topK, category, MM_TEXT_WEIGHT, MM_IMAGE_WEIGHT, MM_POOL_MULT);
+    }
+
+    /**
+     * 可调参版本（供调参与评测）：text→text 与 text→image 两路 RRF 融合。
+     *
+     * @param textWeight  文本通道权重
+     * @param imageWeight 跨模态（text→image）通道权重
+     * @param poolMult    每路候选池倍数（取 topK * poolMult 条）
+     */
+    public List<ProductSearchResult> retrieveProductsMultiModal(String query, int topK, String category,
+                                                                double textWeight, double imageWeight, int poolMult) {
+        log.debug("多模态检索: query=\"{}\" topK={} category={} w=({}, {}) pool={}x",
+                query, topK, category, textWeight, imageWeight, poolMult);
+        float[] queryVector = embeddingService.embedText(query);
+        JsonObject whereFilter = buildCategoryFilter(category);
+        int pool = topK * Math.max(1, poolMult);
+
+        // 通道1：文本空间 text→text
+        List<ScoredResult> textResults = queryCollection(getTextCollectionId(), queryVector, pool, whereFilter);
+        // 通道2：跨模态 text→image（同一个 CLIP 文本向量，查询图像 collection）
+        List<ScoredResult> imageResults = queryCollection(getImageCollectionId(), queryVector, pool, whereFilter);
+
+        Map<String, Double> rrf = new HashMap<>();
+        accumulateRrf(rrf, textResults, textWeight);
+        accumulateRrf(rrf, imageResults, imageWeight);
+
+        List<String> productIds = rrf.entrySet().stream()
+                .sorted(Map.Entry.<String, Double>comparingByValue().reversed())
+                .limit(topK)
+                .map(Map.Entry::getKey)
+                .toList();
+
+        log.debug("多模态结果: text通道={} image通道={} fused={}",
+                textResults.size(), imageResults.size(), productIds.size());
+        return toProductResults(productIds, rrf);
+    }
+
+    /** 构造 category 过滤条件 */
+    private JsonObject buildCategoryFilter(String category) {
+        if (category == null || category.isEmpty()) return null;
+        JsonObject eq = new JsonObject();
+        eq.addProperty("$eq", category);
+        JsonObject where = new JsonObject();
+        where.add("category", eq);
+        return where;
+    }
+
+    /** RRF 累加：排名第 i 的贡献 weight/(K+i+1) */
+    private void accumulateRrf(Map<String, Double> rrf, List<ScoredResult> results, double weight) {
+        for (int i = 0; i < results.size(); i++) {
+            rrf.merge(results.get(i).productId, weight / (RRF_K + i + 1), Double::sum);
+        }
+    }
+
+    /** 按有序 productId 列表联查 DB，组装成 ProductSearchResult（分数取 scoreMap） */
+    private List<ProductSearchResult> toProductResults(List<String> productIds, Map<String, Double> scoreMap) {
+        if (productIds.isEmpty()) return List.of();
+        List<Product> products = productRepository.findByIds(productIds);
+        Map<String, Product> productMap = products.stream()
+                .collect(Collectors.toMap(Product::getProductId, p -> p));
+        return productIds.stream()
+                .map(id -> {
+                    Product p = productMap.get(id);
+                    if (p == null) return null;
+                    double score = scoreMap != null ? scoreMap.getOrDefault(id, 0.0) : 0.0;
+                    return new ProductSearchResult(
+                            p.getProductId(), score, p.getTitle(), p.getBrand(),
                             p.getCategory(), p.getSubCategory(),
                             p.getBasePrice().doubleValue(),
                             p.getImagePath(), p.getMarketingDescription());
