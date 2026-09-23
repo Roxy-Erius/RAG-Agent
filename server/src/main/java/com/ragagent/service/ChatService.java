@@ -54,7 +54,7 @@ public class ChatService {
             1. 你只能推荐下方【商品库】中列出的商品，绝对不能推荐不存在的商品
             2. 你不能编造商品的价格、规格、优惠信息等任何参数
             3. 如果商品库中没有匹配的商品，请如实告知用户，不要编造
-            4. 回复要简洁专业，适合移动端阅读，控制在200字以内
+            4. 回复要简洁专业，适合移动端、Web页面阅读，控制在200字以内
             5. 用户只说了单一品类时，绝对不能直接推荐商品，必须先追问
 
             ## 追问示例
@@ -133,9 +133,9 @@ public class ChatService {
     private static final Pattern ADD_TO_CART_PATTERN = Pattern.compile("\\[ADD_TO_CART:(\\w+)(?::([+\\d]+))?(?::([^\\]]+))?]");
 
     // SSE 缓冲：累积 LLM token，检测完整 [PRODUCT:id] 后才分类发送
-    private final StringBuilder sseBuffer = new StringBuilder();
+    // SSE 缓冲改为 chatStream 内的局部变量（修复 BUG-001 并发串流）
     // 当前会话的合法产品 ID（供 SSE 阶段防幻觉）
-    private volatile Set<String> currentValidIds = Set.of();
+    // 合法商品 ID 改为随请求传入 flushSseBuffer（修复 BUG-001）
 
     // 中文口语噪音词（按长度降序，优先匹配长短语）
     private static final String[] NOISE_WORDS = {
@@ -207,7 +207,7 @@ public class ChatService {
             Set<String> validIds = products.stream()
                     .map(ProductSearchResult::getProductId)
                     .collect(java.util.stream.Collectors.toSet());
-            this.currentValidIds = validIds;
+            StringBuilder sseBuffer = new StringBuilder();   // 请求级局部缓冲
 
             // ④ Generation: 调用 LLM 流式生成
             log.info("│ 调用 LLM...");
@@ -219,7 +219,7 @@ public class ChatService {
                     try {
                         fullResponse.append(token);
                         sseBuffer.append(token);
-                        flushSseBuffer(emitter);
+                        flushSseBuffer(emitter, sseBuffer, validIds);
                     } catch (Exception e) {
                         log.warn("SSE 发送失败: {}", e.getMessage());
                     }
@@ -609,7 +609,7 @@ public class ChatService {
      * 从缓冲区中检测完整的 [PRODUCT:id] / [ADD_TO_CART:id] 标签，分类发送 SSE 事件。
      * 未完成的标签（如 "[PRO"）保留在缓冲区等待后续 token 拼接。
      */
-    private void flushSseBuffer(SseEmitter emitter) throws java.io.IOException {
+    private void flushSseBuffer(SseEmitter emitter, StringBuilder sseBuffer, Set<String> currentValidIds) throws java.io.IOException {
         String buf = sseBuffer.toString();
         if (buf.contains("[ADD") || buf.contains("[PROD")) {
             log.info("  flushSseBuffer | buf=\"{}\" | len={}", buf, buf.length());
