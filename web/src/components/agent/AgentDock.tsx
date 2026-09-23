@@ -1,6 +1,8 @@
 import { useState, useRef, useEffect, useCallback } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
-import { MessageCircle, X, Send, Sparkles, ShoppingCart } from 'lucide-react';
+import { X, Send, ShoppingCart } from 'lucide-react';
+import { Mascot } from './Mascot';
+import { DesktopPet } from './DesktopPet';
 import { sseChat } from '../../lib/sse';
 import { getSessionId } from '../../lib/session';
 import { productApi, cartApi } from '../../lib/api';
@@ -148,16 +150,11 @@ export function AgentDock() {
     <>
       {/* 悬浮按钮 */}
       {!open && (
-        <button
-          onClick={() => { setOpen(true); setUnread(false); }}
-          className={cn(
-            'fixed bottom-6 right-6 z-50 h-14 w-14 rounded-full shadow-lift flex items-center justify-center transition-all duration-300',
-            'bg-gradient-to-br from-[hsl(var(--accent))] to-[hsl(var(--accent-strong))] text-[#fff8ef] hover:scale-110 active:scale-95'
-          )}
-        >
-          <MessageCircle className="h-6 w-6" />
-          {unread && <span className="absolute -top-1 -right-1 h-4 w-4 rounded-full bg-[hsl(var(--danger))] border-2 border-[hsl(var(--surface))]" />}
-        </button>
+        <DesktopPet
+          streaming={streaming}
+          unread={unread}
+          onOpen={() => { setOpen(true); setUnread(false); }}
+        />
       )}
 
       {/* 聊天面板 */}
@@ -170,14 +167,20 @@ export function AgentDock() {
         )}
       >
         {/* header */}
-        <div className="flex items-center gap-2.5 px-4 py-3 border-b border-[hsl(var(--line))] bg-[hsl(var(--bg-soft))]">
-          <span className="h-8 w-8 rounded-full bg-gradient-to-br from-[hsl(var(--accent))] to-[hsl(var(--accent-strong))] flex items-center justify-center text-[#fff8ef]">
-            <Sparkles className="h-4 w-4" />
+        <div className="flex items-center gap-3 px-4 py-3 border-b border-[hsl(var(--line))] bg-gradient-to-b from-[hsl(var(--bg-soft))] to-[hsl(var(--surface))]">
+          <span className="relative h-10 w-10 shrink-0 rounded-full bg-gradient-to-br from-[#FFF7EC] to-[#F2E2CB] border border-[hsl(var(--line))] flex items-center justify-center">
+            <span className={cn('block', streaming ? 'mascot-wiggle' : 'mascot-bob')}>
+              <Mascot size={32} mood={streaming ? 'thinking' : 'idle'} />
+            </span>
+            <span className="absolute bottom-0 right-0 h-3 w-3 rounded-full bg-[hsl(var(--ok))] border-2 border-[hsl(var(--surface))]" />
           </span>
-          <div className="flex-1">
-            <div className="font-semibold text-sm text-[hsl(var(--ink))]">买手助理</div>
-            <div className="text-xs text-[hsl(var(--ink-faint))]">
-              {agentCtx.productId ? `正在看：${agentCtx.productTitle || agentCtx.productId}` : '有任何购物问题都可以问我'}
+          <div className="flex-1 min-w-0">
+            <div className="font-semibold text-sm text-[hsl(var(--ink))] flex items-center gap-1.5">
+              小买
+              <span className="text-[10px] font-normal chip-accent px-1.5 py-0">AI 买手</span>
+            </div>
+            <div className="text-xs text-[hsl(var(--ink-faint))] truncate">
+              {agentCtx.productId ? `正在看：${agentCtx.productTitle || agentCtx.productId}` : '在线 · 随时为你挑选好物'}
             </div>
           </div>
           <Button variant="ghost" size="icon" onClick={() => setOpen(false)}>
@@ -188,21 +191,32 @@ export function AgentDock() {
         {/* messages */}
         <div ref={listRef} className="flex-1 overflow-y-auto px-4 py-4 space-y-4">
           {messages.length === 0 && (
-            <div className="text-center py-10 space-y-3">
-              <div className="h-12 w-12 mx-auto rounded-full bg-[hsl(var(--accent-soft))] flex items-center justify-center">
-                <Sparkles className="h-5 w-5 text-[hsl(var(--accent))]" />
+            <div className="text-center py-8 space-y-4">
+              <div className="mx-auto w-fit mascot-bob">
+                <Mascot size={84} mood="happy" />
               </div>
-              <p className="text-sm text-[hsl(var(--ink-soft))]">你好，我是你的买手助理。</p>
-              <p className="text-xs text-[hsl(var(--ink-faint))]">
-                可以问我：<span className="text-[hsl(var(--accent))]">"推荐一款保湿面霜"</span>、<span className="text-[hsl(var(--accent))]">"油皮适合什么精华"</span>
-              </p>
+              <div className="space-y-1">
+                <p className="text-[15px] font-medium text-[hsl(var(--ink))]">你好呀，我是小买 👋</p>
+                <p className="text-xs text-[hsl(var(--ink-faint))]">你的专属 AI 买手，帮你挑到合适的</p>
+              </div>
+              <div className="flex flex-wrap gap-2 justify-center pt-1">
+                {['推荐一款保湿面霜', '油皮适合什么精华', '帮我找双跑步鞋', '有什么咖啡推荐'].map((s) => (
+                  <button
+                    key={s}
+                    onClick={() => setInput(s)}
+                    className="text-xs px-3 py-1.5 rounded-full bg-[hsl(var(--surface-2))] text-[hsl(var(--ink-soft))] hover:bg-[hsl(var(--accent-soft))] hover:text-[hsl(var(--accent-strong))] transition-colors"
+                  >
+                    {s}
+                  </button>
+                ))}
+              </div>
             </div>
           )}
           {messages.map((m) => (
             <div key={m.id} className={cn('flex gap-2.5', m.role === 'user' ? 'justify-end' : 'justify-start')}>
               {m.role === 'assistant' && (
-                <span className="h-7 w-7 shrink-0 rounded-full bg-gradient-to-br from-[hsl(var(--accent))] to-[hsl(var(--accent-strong))] flex items-center justify-center text-[#fff8ef] mt-0.5">
-                  <Sparkles className="h-3.5 w-3.5" />
+                <span className="h-7 w-7 shrink-0 rounded-full bg-gradient-to-br from-[#FFF7EC] to-[#F2E2CB] border border-[hsl(var(--line))] flex items-center justify-center mt-0.5 overflow-hidden">
+                  <Mascot size={24} mood={m.streaming ? 'thinking' : 'idle'} blink={false} />
                 </span>
               )}
               <div className={cn('max-w-[82%] space-y-2', m.role === 'user' && 'text-right')}>

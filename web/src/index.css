@@ -100,3 +100,110 @@
 /* 购物车数量微动画 */
 .cart-badge-bounce { animation: bounceIn 0.35s cubic-bezier(0.68, -0.55, 0.27, 1.55); }
 @keyframes bounceIn { 0% { transform: scale(0.5); } 60% { transform: scale(1.15); } 100% { transform: scale(1); } }
+
+/* ===== 导购吉祥物「小买」动画 ===== */
+/* 眨眼 */
+.mascot-eyes {
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: mascotBlink 4.5s ease-in-out infinite;
+}
+@keyframes mascotBlink {
+  0%, 90%, 100% { transform: scaleY(1); }
+  93% { transform: scaleY(0.12); }
+  96% { transform: scaleY(1); }
+}
+/* 上下轻微浮动（呼吸感） */
+.mascot-bob { animation: mascotBob 3.2s ease-in-out infinite; }
+@keyframes mascotBob {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-5%); }
+}
+/* 浮现时弹一下 */
+.mascot-pop { animation: mascotPop 0.45s cubic-bezier(0.68, -0.55, 0.27, 1.55) both; }
+@keyframes mascotPop {
+  0% { transform: scale(0.6); opacity: 0; }
+  100% { transform: scale(1); opacity: 1; }
+}
+/* 思考时轻微摇摆 */
+.mascot-wiggle { animation: mascotWiggle 1.6s ease-in-out infinite; transform-origin: 50% 90%; }
+@keyframes mascotWiggle {
+  0%, 100% { transform: rotate(-3deg); }
+  50% { transform: rotate(3deg); }
+}
+/* 在线呼吸光环（用 box-shadow 脉冲，避免遮挡吉祥物） */
+.mascot-halo { animation: mascotHalo 2.6s ease-out infinite; }
+@keyframes mascotHalo {
+  0% { box-shadow: var(--shadow-lg), 0 0 0 0 hsl(var(--accent) / 0.35); }
+  70%, 100% { box-shadow: var(--shadow-lg), 0 0 0 16px hsl(var(--accent) / 0); }
+}
+
+/* ===== 桌宠「小买」动画 ===== */
+/* 呼吸 */
+.pet-breathe { transform-box: fill-box; transform-origin: 50% 90%; animation: petBreathe 2.8s ease-in-out infinite; }
+@keyframes petBreathe {
+  0%, 100% { transform: scaleY(1) translateY(0); }
+  50% { transform: scaleY(1.035) translateY(-1.5%); }
+}
+/* 尾巴摇摆 */
+.pet-tail { transform-box: fill-box; transform-origin: 90% 85%; animation: petTail 1.3s ease-in-out infinite; }
+@keyframes petTail {
+  0%, 100% { transform: rotate(-7deg); }
+  50% { transform: rotate(9deg); }
+}
+/* 眨眼 */
+.pet-eye { transform-box: fill-box; transform-origin: center; animation: petBlink 5s ease-in-out infinite; }
+@keyframes petBlink {
+  0%, 92%, 100% { transform: scaleY(1); }
+  95% { transform: scaleY(0.12); }
+}
+/* 走路：四腿对角摆动 */
+.pet-leg { transform-box: fill-box; transform-origin: top center; }
+.pet-walk .pet-leg-a { animation: petLeg 0.42s ease-in-out infinite alternate; }
+.pet-walk .pet-leg-b { animation: petLeg 0.42s ease-in-out infinite alternate-reverse; }
+@keyframes petLeg {
+  from { transform: rotate(-17deg); }
+  to { transform: rotate(17deg); }
+}
+/* 走路时身体轻微上下 */
+.pet-walk { animation: petWalkBob 0.42s ease-in-out infinite; }
+@keyframes petWalkBob {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-2px); }
+}
+/* 坐着：腿收起 */
+.pet-legs-tucked { transform-box: fill-box; transform-origin: 50% 0; transform: translateY(6px) scaleY(0.55); }
+.pet-head-sit { transform-box: fill-box; transform-origin: 50% 100%; transform: translateY(4px); }
+/* 开心：跳一下 */
+.pet-jump { animation: petJump 0.5s ease; }
+@keyframes petJump {
+  0% { transform: translateY(0); }
+  40% { transform: translateY(-20px); }
+  100% { transform: translateY(0); }
+}
+/* 思考：轻微摇摆 */
+.pet-think { animation: petThink 1.6s ease-in-out infinite; transform-origin: 50% 92%; }
+@keyframes petThink {
+  0%, 100% { transform: rotate(-2deg); }
+  50% { transform: rotate(2deg); }
+}
+/* 待机：偶发小幅张望 */
+.pet-idle { animation: petIdle 4.5s ease-in-out infinite; transform-origin: 50% 92%; }
+@keyframes petIdle {
+  0%, 88%, 100% { transform: rotate(0); }
+  92% { transform: rotate(-1.5deg); }
+  96% { transform: rotate(1.5deg); }
+}
+/* 睡觉 Zzz 飘 */
+.pet-zzz { animation: petZzz 2.2s ease-in-out infinite; }
+@keyframes petZzz {
+  0% { opacity: 0; transform: translateY(0) translateX(0); }
+  35% { opacity: 1; }
+  100% { opacity: 0; transform: translateY(-16px) translateX(6px); }
+}
+/* 睡觉：缓慢起伏的呼吸 */
+.pet-sleep-breathe { transform-box: fill-box; transform-origin: 50% 92%; animation: petSleepBreathe 4.4s ease-in-out infinite; }
+@keyframes petSleepBreathe {
+  0%, 100% { transform: scale(1); }
+  50% { transform: scale(1.03, 1.05); }
+}
