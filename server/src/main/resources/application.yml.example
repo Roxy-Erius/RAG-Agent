@@ -45,3 +45,13 @@ rag:
 # ==================== 数据集路径 ====================
 dataset:
   path: ../ecommerce_agent_dataset
+
+# ==================== LLM-as-Judge（评测用，可选）====================
+# 用本地 M-Prometheus 当裁判（Ollama，OpenAI 兼容端点）。
+# 起步：装 Ollama → ollama create m-prometheus（见 docs/LLM-as-Judge.md）
+# 也可填任意 OpenAI 兼容的更强模型（Gemini/GPT 等）当独立裁判。
+judge:
+  base-url: http://localhost:11434/v1
+  api-key: not-needed
+  model-id: m-prometheus
+  timeout-seconds: 180

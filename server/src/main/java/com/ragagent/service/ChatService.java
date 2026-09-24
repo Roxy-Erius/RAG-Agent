@@ -276,7 +276,18 @@ public class ChatService {
     /**
      * 非流式对话（备用）
      */
+    /** 对话结果：回复 + 本次实际检索到的商品（供评测/调试用） */
+    public record ChatResult(String reply, List<ProductSearchResult> products) {}
+
     public String chat(String sessionId, String conversationId, Long userId, String userMessage) {
+        return chatWithContext(sessionId, conversationId, userId, userMessage).reply();
+    }
+
+    /**
+     * 与 {@link #chat} 相同，但额外返回本次 agent 实际用于生成的检索商品。
+     * 评测（如 LLM-as-Judge 忠实度）需要知道"事实来源"到底是哪几件商品。
+     */
+    public ChatResult chatWithContext(String sessionId, String conversationId, Long userId, String userMessage) {
         String cleaned = preprocessQuery(userMessage);
         String retrievalQuery = augmentQuery(sessionId, cleaned);
         List<ProductSearchResult> products = retrieverService.retrieveProductsMultiModal(retrievalQuery, ragConfig.getTopK(), null);
@@ -324,10 +335,10 @@ public class ChatService {
         });
 
         try {
-            return future.get();  // 阻塞等待完成
+            return new ChatResult(future.get(), products);  // 阻塞等待完成
         } catch (Exception e) {
             log.error("非流式对话异常: {}", e.getMessage());
-            return "抱歉，处理您的请求时出现错误，请稍后重试。";
+            return new ChatResult("抱歉，处理您的请求时出现错误，请稍后重试。", products);
         }
     }
 
