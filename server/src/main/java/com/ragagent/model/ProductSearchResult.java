@@ -14,6 +14,8 @@ public class ProductSearchResult {
     private double basePrice;
     private String imagePath;
     private String marketingDescription;
+    /** 是否超出用户预算（仅在带预算的检索中标注；true=超预算） */
+    private boolean overBudget;
 
     public ProductSearchResult(String productId, double score, String title, String brand,
                                String category, String subCategory, double basePrice,
@@ -39,4 +41,6 @@ public class ProductSearchResult {
     public double getBasePrice() { return basePrice; }
     public String getImagePath() { return imagePath; }
     public String getMarketingDescription() { return marketingDescription; }
+    public boolean isOverBudget() { return overBudget; }
+    public void setOverBudget(boolean overBudget) { this.overBudget = overBudget; }
 }

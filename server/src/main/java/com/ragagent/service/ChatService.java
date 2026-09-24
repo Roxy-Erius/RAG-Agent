@@ -56,6 +56,9 @@ public class ChatService {
             3. 如果商品库中没有匹配的商品，请如实告知用户，不要编造
             4. 回复要简洁专业，适合移动端、Web页面阅读，控制在200字以内
             5. 用户只说了单一品类时，绝对不能直接推荐商品，必须先追问
+            6. 若用户给了预算：**优先推荐预算内的商品**；若预算内没有匹配、只能用超预算商品，必须明确说明"预算内暂无完全匹配的商品"，并**清楚告知该商品超出预算多少**，再询问用户是否愿意放宽预算
+            7. 【商品库】中标注"⚠️超预算"的商品即超出用户预算，提及价格时必须如实说明超出多少，**禁止用"略超预算"淡化**
+            8. 【推荐优先】当用户已给出「品类」+「预算/价位/使用场景/规格尺寸/功效/品牌」中的任意一项时，**应优先直接推荐商品**，不要以"确认需求"为由反复追问（信息确实不足时最多追问一次）；但若商品库中确实没有匹配商品，按第 3 条如实告知，不要硬推不相关的商品
 
             ## 追问示例
             用户："推荐跑鞋"
@@ -132,6 +135,11 @@ public class ChatService {
     private static final Pattern PRODUCT_TAG_PATTERN = Pattern.compile("\\[PRODUCT:(\\w+)]");
     private static final Pattern ADD_TO_CART_PATTERN = Pattern.compile("\\[ADD_TO_CART:(\\w+)(?::([+\\d]+))?(?::([^\\]]+))?]");
 
+    /** 预算解析：匹配「预算/价位/不超过…+数字」或「数字+元/块+以内/以下/左右」 */
+    private static final Pattern BUDGET_PATTERN = Pattern.compile(
+            "(?:预算|价位|价格|不超过|低于|控制在|最多)\\s*[:：]?\\s*(\\d{2,6})"
+            + "|(\\d{2,6})\\s*(?:元|块|rmb|RMB)?\\s*(?:以内|以下|左右|内|封顶)");
+
     // SSE 缓冲：累积 LLM token，检测完整 [PRODUCT:id] 后才分类发送
     // SSE 缓冲改为 chatStream 内的局部变量（修复 BUG-001 并发串流）
     // 当前会话的合法产品 ID（供 SSE 阶段防幻觉）
@@ -189,7 +197,8 @@ public class ChatService {
             String cleaned = preprocessQuery(userMessage);
             String retrievalQuery = augmentQuery(sessionId, cleaned);
             log.info("│ 预处理: \"{}\" → \"{}\"", userMessage, retrievalQuery);
-            List<ProductSearchResult> products = retrieverService.retrieveProductsMultiModal(retrievalQuery, ragConfig.getTopK(), null);
+            Double budget = parseBudget(userMessage);
+            List<ProductSearchResult> products = retrieverService.retrieveProductsMultiModal(retrievalQuery, ragConfig.getTopK(), null, budget);
             log.info("│ 检索结果: {} 条 | ids={}",
                     products.size(),
                     products.stream().map(ProductSearchResult::getProductId).toList());
@@ -290,7 +299,8 @@ public class ChatService {
     public ChatResult chatWithContext(String sessionId, String conversationId, Long userId, String userMessage) {
         String cleaned = preprocessQuery(userMessage);
         String retrievalQuery = augmentQuery(sessionId, cleaned);
-        List<ProductSearchResult> products = retrieverService.retrieveProductsMultiModal(retrievalQuery, ragConfig.getTopK(), null);
+        Double budget = parseBudget(userMessage);
+        List<ProductSearchResult> products = retrieverService.retrieveProductsMultiModal(retrievalQuery, ragConfig.getTopK(), null, budget);
         String context = formatProducts(products);
         String cartInfo = formatCart(sessionId, userId);
         String userProfile = formatUserProfile(userId);
@@ -361,6 +371,25 @@ public class ChatService {
      *   "帮我推荐一下保湿面霜。" → "推荐保湿面霜"
      *   "你好，请问有没有蓝牙耳机啊？" → "蓝牙耳机"
      */
+    /**
+     * 从用户原话解析预算上限（元）。识别："预算300元以内"、"300以内"、"不超过2000" 等；识别不到返回 null。
+     */
+    private Double parseBudget(String message) {
+        if (message == null) return null;
+        Matcher m = BUDGET_PATTERN.matcher(message);
+        if (m.find()) {
+            String num = m.group(1) != null ? m.group(1) : m.group(2);
+            if (num != null) {
+                try {
+                    return Double.parseDouble(num);
+                } catch (NumberFormatException ignored) {
+                    // fallthrough
+                }
+            }
+        }
+        return null;
+    }
+
     private String preprocessQuery(String query) {
         String result = query;
         // 去除首尾标点和空白
@@ -501,13 +530,15 @@ public class ChatService {
         StringBuilder sb = new StringBuilder();
         for (int i = 0; i < products.size(); i++) {
             ProductSearchResult p = products.get(i);
-            sb.append(String.format("%d. [ID:%s] %s | %s | %s | %.0f元\n   %s\n",
+            String budgetMark = p.isOverBudget() ? " ⚠️超预算" : "";
+            sb.append(String.format("%d. [ID:%s] %s | %s | %s | %.0f元%s\n   %s\n",
                     i + 1,
                     p.getProductId(),
                     p.getTitle(),
                     p.getBrand(),
                     p.getCategory(),
                     p.getBasePrice(),
+                    budgetMark,
                     truncate(p.getMarketingDescription(), 100)));
 
             // 追加规格信息（SKU）

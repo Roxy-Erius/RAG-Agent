@@ -74,7 +74,7 @@ class ChatServiceConcurrencyTest {
 
     private ChatService buildService(OpenAiStreamingChatModel model) {
         RetrieverService retriever = mock(RetrieverService.class);
-        when(retriever.retrieveProductsMultiModal(anyString(), anyInt(), any())).thenReturn(List.of());
+        when(retriever.retrieveProductsMultiModal(anyString(), anyInt(), any(), any())).thenReturn(List.of());
 
         SessionService sessionService = mock(SessionService.class);
         when(sessionService.getHistory(anyString())).thenReturn(List.of());

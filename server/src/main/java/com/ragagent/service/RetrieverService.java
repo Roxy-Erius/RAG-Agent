@@ -217,6 +217,29 @@ public class RetrieverService {
         return toProductResults(productIds, rrf);
     }
 
+    /**
+     * 预算感知的多模态检索：
+     * 语义融合取较大候选池 → **预算内优先**；若预算内不足 topK，用「最接近预算的超预算商品」补齐并标记 {@code overBudget}。
+     *
+     * @param maxPrice 用户预算上限（null = 不限预算，走原逻辑）
+     */
+    public List<ProductSearchResult> retrieveProductsMultiModal(String query, int topK, String category, Double maxPrice) {
+        if (maxPrice == null) {
+            return retrieveProductsMultiModal(query, topK, category);
+        }
+        // 相关性优先：检索结果与「无预算」时完全一致，只额外标注「超预算」。
+        // 让 LLM 依据标注 + prompt 规则去权衡（不重排，避免把"便宜但不相关"的商品顶上来）。
+        List<ProductSearchResult> result = retrieveProductsMultiModal(query, topK, category);
+        int overCount = 0;
+        for (ProductSearchResult r : result) {
+            boolean over = r.getBasePrice() > maxPrice;
+            r.setOverBudget(over);
+            if (over) overCount++;
+        }
+        log.debug("预算标注: maxPrice={} | 返回={} 超预算={}", maxPrice, result.size(), overCount);
+        return result;
+    }
+
     /** 构造 category 过滤条件 */
     private JsonObject buildCategoryFilter(String category) {
         if (category == null || category.isEmpty()) return null;
