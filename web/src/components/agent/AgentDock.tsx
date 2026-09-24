@@ -25,7 +25,6 @@ export function AgentDock() {
   const agentCtx = useAgentContext();
 
   const addToCart = useCartStore((s) => s.addItem);
-  const removeItem = useCartStore((s) => s.removeItem);
   const clearCart = useCartStore((s) => s.clear);
   const setItems = useCartStore((s) => s.setItems);
 
@@ -77,19 +76,18 @@ export function AgentDock() {
           console.warn('拉取商品详情失败', evt.productId, e);
         }
       } else if (evt.type === 'add_to_cart' && evt.productId) {
-        // 对话驱动：mode='add' 追加 / mode='set' 设为 N 件
-        cartActions.push({
-          type: evt.mode === 'set' ? 'set' : 'add',
-          productId: evt.productId,
-          label: evt.skuLabel,
-          quantity: evt.quantity ?? 1,
-        });
+        // 对话驱动：mode='add' 追加 / mode='set' 设为 N 件 → **立即执行**（与 agent"已加入"文案一致）
+        const action = { type: (evt.mode === 'set' ? 'set' : 'add') as 'add' | 'set', productId: evt.productId, label: evt.skuLabel, quantity: evt.quantity ?? 1 };
+        const ok = await handleCartAction(action);
+        cartActions.push({ ...action, done: ok });
         setMessages((prev) => prev.map((m) => (m.id === assistantId ? { ...m, cartActions: [...cartActions] } : m)));
       } else if (evt.type === 'delete_from_cart' && evt.cartItemId != null) {
-        cartActions.push({ type: 'delete', cartItemId: evt.cartItemId });
+        const ok = await handleCartAction({ type: 'delete', cartItemId: evt.cartItemId });
+        cartActions.push({ type: 'delete', cartItemId: evt.cartItemId, done: ok });
         setMessages((prev) => prev.map((m) => (m.id === assistantId ? { ...m, cartActions: [...cartActions] } : m)));
       } else if (evt.type === 'clear_cart') {
-        cartActions.push({ type: 'clear' });
+        const ok = await handleCartAction({ type: 'clear' });
+        cartActions.push({ type: 'clear', done: ok });
         setMessages((prev) => prev.map((m) => (m.id === assistantId ? { ...m, cartActions: [...cartActions] } : m)));
       } else if (evt.type === 'done') {
         setStreaming(false);
@@ -115,7 +113,7 @@ export function AgentDock() {
     );
   }, [input, streaming, open, sessionId]);
 
-  const handleCartAction = async (action: { type: string; productId?: string; label?: string; quantity?: number; cartItemId?: number }) => {
+  const handleCartAction = async (action: { type: string; productId?: string; label?: string; quantity?: number; cartItemId?: number }): Promise<boolean> => {
     try {
       if ((action.type === 'add' || action.type === 'set') && action.productId) {
         const p = await productApi.detail(action.productId);
@@ -130,9 +128,10 @@ export function AgentDock() {
           addToCart({ ...item, productTitle: p.title, productPrice: p.basePrice, productImageBase64: p.imageBase64 });
         }
       } else if (action.type === 'delete' && action.cartItemId != null) {
-        // 删单个：后端 + 本地
+        // 删单个：后端删除后重拉列表，保证本地 store 与后端一致（避免"本地没这条 → UI 不更新"）
         await cartApi.remove(action.cartItemId, sessionId);
-        removeItem(action.cartItemId);
+        const fresh = await cartApi.list(sessionId);
+        setItems(fresh.items);
       } else if (action.type === 'clear') {
         // 后端没有清整车的接口 → 先拉列表，逐个删（同时保证本地一致）
         const data = await cartApi.list(sessionId);
@@ -141,8 +140,10 @@ export function AgentDock() {
         }
         clearCart();
       }
+      return true;
     } catch (e) {
       console.error('购物车操作失败', e);
+      return false;
     }
   };
 
@@ -252,16 +253,27 @@ export function AgentDock() {
                 {/* 购物车动作 */}
                 {m.cartActions && m.cartActions.length > 0 && (
                   <div className="flex flex-wrap gap-2">
-                    {m.cartActions.map((a, i) => (
-                      <Button key={i} size="sm" variant={a.type === 'clear' || a.type === 'delete' ? 'outline' : 'ok'} onClick={() => handleCartAction(a)}>
-                        <ShoppingCart className="h-3.5 w-3.5" />
-                        {a.type === 'add' && '加入购物车'}
-                        {a.type === 'set' && `设为 ${a.quantity ?? 1} 件`}
-                        {a.type === 'delete' && '移除'}
-                        {a.type === 'clear' && '清空购物车'}
-                        {a.label && <span className="text-xs opacity-80">({a.label})</span>}
-                      </Button>
-                    ))}
+                    {m.cartActions.map((a, i) =>
+                      a.done ? (
+                        <span key={i} className="inline-flex items-center gap-1 text-xs text-[hsl(var(--ok))] bg-[hsl(var(--ok))]/10 px-2.5 py-1 rounded-full">
+                          <ShoppingCart className="h-3.5 w-3.5" />
+                          {a.type === 'add' && '已加入购物车'}
+                          {a.type === 'set' && `已设为 ${a.quantity ?? 1} 件`}
+                          {a.type === 'delete' && '已移除'}
+                          {a.type === 'clear' && '已清空购物车'}
+                          {a.label && <span className="opacity-80">({a.label})</span>}
+                        </span>
+                      ) : (
+                        <Button key={i} size="sm" variant={a.type === 'clear' || a.type === 'delete' ? 'outline' : 'ok'} onClick={() => handleCartAction(a)}>
+                          <ShoppingCart className="h-3.5 w-3.5" />
+                          {a.type === 'add' && '加入购物车'}
+                          {a.type === 'set' && `设为 ${a.quantity ?? 1} 件`}
+                          {a.type === 'delete' && '移除'}
+                          {a.type === 'clear' && '清空购物车'}
+                          {a.label && <span className="text-xs opacity-80">({a.label})</span>}
+                        </Button>
+                      )
+                    )}
                   </div>
                 )}
               </div>

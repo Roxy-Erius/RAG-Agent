@@ -88,7 +88,7 @@ export interface ChatMessage {
   role: 'user' | 'assistant';
   text: string;
   cards?: Product[];             // 该消息附带的商品卡片
-  cartActions?: { type: 'add' | 'set' | 'delete' | 'clear'; productId?: string; label?: string; quantity?: number; cartItemId?: number }[];
+  cartActions?: { type: 'add' | 'set' | 'delete' | 'clear'; productId?: string; label?: string; quantity?: number; cartItemId?: number; done?: boolean }[];
   streaming?: boolean;           // 是否还在流式中
   timestamp: number;
 }
