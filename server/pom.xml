@@ -40,6 +40,18 @@
             <scope>runtime</scope>
         </dependency>
 
+        <!-- ==================== 数据库版本管理 Flyway ==================== -->
+        <!-- 版本由 spring-boot-starter-parent 统一管理 -->
+        <dependency>
+            <groupId>org.flywaydb</groupId>
+            <artifactId>flyway-core</artifactId>
+        </dependency>
+        <!-- MySQL 8 支持（Flyway 8.2+ 需单独引入） -->
+        <dependency>
+            <groupId>org.flywaydb</groupId>
+            <artifactId>flyway-mysql</artifactId>
+        </dependency>
+
         <!-- ==================== LangChain4j 核心 ==================== -->
         <dependency>
             <groupId>dev.langchain4j</groupId>

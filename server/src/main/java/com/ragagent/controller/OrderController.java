@@ -34,9 +34,6 @@ public class OrderController {
         this.cartRepository = cartRepository;
         this.jwtAuthFilter = jwtAuthFilter;
         this.orderRepository = orderRepository;
-        // 启动时确保 orders 表存在
-        orderRepository.ensureTableExists();
-        log.info("orders 表已就绪");
     }
 
     /**

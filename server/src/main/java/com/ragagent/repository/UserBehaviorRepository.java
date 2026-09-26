@@ -1,7 +1,6 @@
 package com.ragagent.repository;
 
 import com.ragagent.model.UserBehavior;
-import jakarta.annotation.PostConstruct;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.jdbc.core.RowMapper;
 import org.springframework.stereotype.Repository;
@@ -26,22 +25,6 @@ public class UserBehaviorRepository {
 
     public UserBehaviorRepository(JdbcTemplate jdbc) {
         this.jdbc = jdbc;
-    }
-
-    @PostConstruct
-    public void initTables() {
-        jdbc.execute("""
-            CREATE TABLE IF NOT EXISTS user_behaviors (
-                id BIGINT AUTO_INCREMENT PRIMARY KEY,
-                user_id BIGINT NOT NULL,
-                product_id VARCHAR(50) NOT NULL,
-                action_type VARCHAR(20) NOT NULL,
-                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                INDEX idx_user_id (user_id),
-                INDEX idx_action_type (action_type),
-                INDEX idx_created_at (created_at)
-            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
-        """);
     }
 
     public void record(Long userId, String productId, String actionType) {

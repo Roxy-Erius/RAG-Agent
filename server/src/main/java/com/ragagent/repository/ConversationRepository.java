@@ -1,7 +1,6 @@
 package com.ragagent.repository;
 
 import com.ragagent.model.Conversation;
-import jakarta.annotation.PostConstruct;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.jdbc.core.RowMapper;
 import org.springframework.jdbc.support.GeneratedKeyHolder;
@@ -32,33 +31,6 @@ public class ConversationRepository {
 
     public ConversationRepository(JdbcTemplate jdbc) {
         this.jdbc = jdbc;
-    }
-
-    @PostConstruct
-    public void initTables() {
-        jdbc.execute("""
-            CREATE TABLE IF NOT EXISTS conversations (
-                id BIGINT AUTO_INCREMENT PRIMARY KEY,
-                user_id BIGINT NOT NULL,
-                conversation_id VARCHAR(36) NOT NULL UNIQUE,
-                title VARCHAR(100),
-                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-                INDEX idx_user_id (user_id),
-                INDEX idx_conversation_id (conversation_id)
-            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
-        """);
-        jdbc.execute("""
-            CREATE TABLE IF NOT EXISTS messages (
-                id BIGINT AUTO_INCREMENT PRIMARY KEY,
-                conversation_id BIGINT NOT NULL,
-                role VARCHAR(10) NOT NULL,
-                content TEXT,
-                product_ids VARCHAR(500),
-                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                INDEX idx_conv_id (conversation_id)
-            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
-        """);
     }
 
     public Conversation create(Long userId, String conversationId, String title) {

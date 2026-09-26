@@ -38,29 +38,6 @@ public class OrderRepository {
     }
 
     /**
-     * 创建订单表（如果不存在）。
-     * 由启动器自动调用，避免手动执行 init.sql。
-     */
-    public void ensureTableExists() {
-        jdbc.execute("""
-            CREATE TABLE IF NOT EXISTS orders (
-                id BIGINT AUTO_INCREMENT PRIMARY KEY,
-                order_id VARCHAR(32) NOT NULL COMMENT '订单号',
-                user_id BIGINT NULL COMMENT '用户ID，匿名可为null',
-                session_id VARCHAR(50) NOT NULL COMMENT '会话ID',
-                total_amount DECIMAL(10,2) NOT NULL COMMENT '总金额',
-                item_count INT NOT NULL COMMENT '商品数量',
-                status VARCHAR(20) NOT NULL DEFAULT 'pending' COMMENT '状态',
-                created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-                paid_at DATETIME NULL COMMENT '支付时间',
-                INDEX idx_order_id (order_id),
-                INDEX idx_user_id (user_id),
-                INDEX idx_session_id (session_id)
-            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='订单表';
-            """);
-    }
-
-    /**
      * 保存订单并返回带 ID 的订单对象。
      */
     public Order save(Order order) {
