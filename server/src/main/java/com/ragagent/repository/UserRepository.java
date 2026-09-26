@@ -19,6 +19,7 @@ public class UserRepository {
         u.setId(rs.getLong("id"));
         u.setUsername(rs.getString("username"));
         u.setPasswordHash(rs.getString("password_hash"));
+        try { u.setRole(rs.getString("role")); } catch (Exception e) { u.setRole("USER"); }
         u.setCreatedAt(rs.getTimestamp("created_at") != null
                 ? rs.getTimestamp("created_at").toLocalDateTime() : null);
         return u;

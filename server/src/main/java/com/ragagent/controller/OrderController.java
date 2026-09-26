@@ -25,15 +25,18 @@ public class OrderController {
     private final com.ragagent.repository.CartRepository cartRepository;
     private final JwtAuthFilter jwtAuthFilter;
     private final OrderRepository orderRepository;
+    private final com.ragagent.service.LogEventService logEventService;
 
     public OrderController(CartService cartService,
                            com.ragagent.repository.CartRepository cartRepository,
                            JwtAuthFilter jwtAuthFilter,
-                           OrderRepository orderRepository) {
+                           OrderRepository orderRepository,
+                           com.ragagent.service.LogEventService logEventService) {
         this.cartService = cartService;
         this.cartRepository = cartRepository;
         this.jwtAuthFilter = jwtAuthFilter;
         this.orderRepository = orderRepository;
+        this.logEventService = logEventService;
     }
 
     /**
@@ -91,6 +94,9 @@ public class OrderController {
         order.setItems(selectedItems);
         orderRepository.save(order);
         log.info("订单已落库 | orderId={} | total=¥{} | items={}", order.getOrderId(), total, order.getItemCount());
+        logEventService.action("ORDER", "结算成功 orderId=" + order.getOrderId()
+                + " total=" + total + " items=" + order.getItemCount()
+                + " userId=" + userId + " sessionId=" + sessionId);
 
         // Delete selected items from cart
         int deleted;

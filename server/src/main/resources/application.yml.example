@@ -18,6 +18,12 @@ spring:
     baseline-on-migrate: true
     baseline-version: 1
 
+# ==================== CORS（前端来源）====================
+# 5173 = 导购端 web；5174 = 管理后台 admin。多个用逗号分隔。
+web:
+  cors:
+    allowed-origins: http://localhost:5173,http://127.0.0.1:5173,http://localhost:5174,http://127.0.0.1:5174
+
 # ==================== ChromaDB 配置 ====================
 chromadb:
   url: http://服务器IP:8000

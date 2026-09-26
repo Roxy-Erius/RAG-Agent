@@ -7,6 +7,8 @@ import com.ragagent.repository.ProductRepository;
 import com.ragagent.service.CartService;
 import com.ragagent.service.ChatService;
 import com.ragagent.service.ConversationService;
+import com.ragagent.service.LogEventService;
+import com.ragagent.service.MetricsService;
 import com.ragagent.service.RetrieverService;
 import com.ragagent.service.SessionService;
 import dev.langchain4j.data.message.AiMessage;
@@ -91,7 +93,9 @@ class ChatServiceConcurrencyTest {
                 cartService,
                 mock(ConversationRepository.class),
                 mock(MessageRepository.class),
-                mock(ProductRepository.class));
+                mock(ProductRepository.class),
+                mock(LogEventService.class),
+                mock(MetricsService.class));
     }
 
     @Test

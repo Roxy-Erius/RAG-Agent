@@ -164,6 +164,8 @@ public class ChatService {
     private final ConversationRepository conversationRepository;
     private final MessageRepository messageRepo;
     private final ProductRepository productRepository;
+    private final LogEventService logEventService;
+    private final MetricsService metricsService;
 
     public ChatService(RagConfig ragConfig,
                        RetrieverService retrieverService,
@@ -173,7 +175,9 @@ public class ChatService {
                        CartService cartService,
                        ConversationRepository conversationRepository,
                        MessageRepository messageRepo,
-                       ProductRepository productRepository) {
+                       ProductRepository productRepository,
+                       LogEventService logEventService,
+                       MetricsService metricsService) {
         this.ragConfig = ragConfig;
         this.retrieverService = retrieverService;
         this.streamingChatModel = streamingChatModel;
@@ -183,6 +187,8 @@ public class ChatService {
         this.conversationRepository = conversationRepository;
         this.messageRepo = messageRepo;
         this.productRepository = productRepository;
+        this.logEventService = logEventService;
+        this.metricsService = metricsService;
     }
 
     /**
@@ -192,7 +198,13 @@ public class ChatService {
      */
     public void chatStream(String sessionId, String conversationId, Long userId,
                            String userMessage, SseEmitter emitter) {
+        // SSE 活跃连接计数：确保只减一次（onComplete / onError / 外层异常 三选一）
+        final java.util.concurrent.atomic.AtomicBoolean sseCounted = new java.util.concurrent.atomic.AtomicBoolean(false);
+        Runnable closeSse = () -> {
+            if (sseCounted.compareAndSet(false, true)) metricsService.sseClosed();
+        };
         try {
+            metricsService.sseOpened();
             // ① Retrieval: 检索相关商品（带完整信息 + score）
             //    先去噪音词，再多轮增强，避免口语化词汇干扰 embedding
             log.info("┌─ RAG 流式对话开始 | sessionId={}", sessionId);
@@ -200,7 +212,9 @@ public class ChatService {
             String retrievalQuery = augmentQuery(sessionId, cleaned);
             log.info("│ 预处理: \"{}\" → \"{}\"", userMessage, retrievalQuery);
             Double budget = parseBudget(userMessage);
+            long retrievalStart = System.currentTimeMillis();
             List<ProductSearchResult> products = retrieverService.retrieveProductsMultiModal(retrievalQuery, ragConfig.getTopK(), null, budget);
+            metricsService.recordRetrieval(System.currentTimeMillis() - retrievalStart);
             log.info("│ 检索结果: {} 条 | ids={}",
                     products.size(),
                     products.stream().map(ProductSearchResult::getProductId).toList());
@@ -224,10 +238,14 @@ public class ChatService {
             log.info("│ 调用 LLM...");
             long startTime = System.currentTimeMillis();
             StringBuilder fullResponse = new StringBuilder();
+            final java.util.concurrent.atomic.AtomicBoolean firstToken = new java.util.concurrent.atomic.AtomicBoolean(false);
             streamingChatModel.generate(messages, new StreamingResponseHandler<AiMessage>() {
                 @Override
                 public void onNext(String token) {
                     try {
+                        if (firstToken.compareAndSet(false, true)) {
+                            metricsService.recordLlmFirstToken(System.currentTimeMillis() - startTime);
+                        }
                         fullResponse.append(token);
                         sseBuffer.append(token);
                         flushSseBuffer(emitter, sseBuffer, validIds);
@@ -239,6 +257,8 @@ public class ChatService {
                 @Override
                 public void onComplete(Response<AiMessage> response) {
                     try {
+                        metricsService.recordLlmTotal(System.currentTimeMillis() - startTime);
+                        closeSse.run();
                         // 刷出缓冲区剩余文本
                         emitTokens(emitter, sseBuffer.toString());
                         sseBuffer.setLength(0);
@@ -261,6 +281,9 @@ public class ChatService {
                         long elapsed = System.currentTimeMillis() - startTime;
                         log.info("└─ 对话完成 | sessionId={} | conversationId={} | 回复长度={} | 耗时={}ms",
                                 sessionId, effectiveCid, reply.length(), elapsed);
+                        logEventService.action("CHAT", "对话完成 sessionId=" + sessionId
+                                + " conversationId=" + effectiveCid + " userId=" + userId
+                                + " 耗时=" + elapsed + "ms 回复长度=" + reply.length());
                         emitter.send(SseEmitter.event().data(
                                 "{\"type\":\"done\",\"conversationId\":\"" +
                                 (effectiveCid != null ? effectiveCid : "") + "\"}"));
@@ -273,12 +296,14 @@ public class ChatService {
 
                 @Override
                 public void onError(Throwable error) {
+                    closeSse.run();
                     log.error("LLM 调用失败: {}", error.getMessage());
                     emitter.completeWithError(error);
                 }
             });
 
         } catch (Exception e) {
+            closeSse.run();
             log.error("chatStream 异常: {}", e.getMessage(), e);
             emitter.completeWithError(e);
         }

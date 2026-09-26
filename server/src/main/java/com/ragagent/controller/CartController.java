@@ -4,6 +4,7 @@ import com.ragagent.model.CartItem;
 import com.ragagent.security.JwtAuthFilter;
 import com.ragagent.service.CartService;
 import com.ragagent.service.ImageService;
+import com.ragagent.service.MetricsService;
 import jakarta.servlet.http.HttpServletRequest;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -20,11 +21,14 @@ public class CartController {
     private final CartService cartService;
     private final JwtAuthFilter jwtAuthFilter;
     private final ImageService imageService;
+    private final MetricsService metricsService;
 
-    public CartController(CartService cartService, JwtAuthFilter jwtAuthFilter, ImageService imageService) {
+    public CartController(CartService cartService, JwtAuthFilter jwtAuthFilter,
+                          ImageService imageService, MetricsService metricsService) {
         this.cartService = cartService;
         this.jwtAuthFilter = jwtAuthFilter;
         this.imageService = imageService;
+        this.metricsService = metricsService;
     }
 
     @PostMapping("/add")
@@ -39,10 +43,16 @@ public class CartController {
         log.info("==> POST /api/cart/add | sessionId={} | userId={} | productId={} | skuId={} | skuLabel={} | quantity={}",
                 sessionId, userId, productId, skuId, skuLabel, quantity);
         CartItem item;
-        if (userId != null) {
-            item = cartService.addToCart(sessionId, userId, productId, skuId, skuLabel, quantity);
-        } else {
-            item = cartService.addToCart(sessionId, productId, skuId, skuLabel, quantity);
+        try {
+            if (userId != null) {
+                item = cartService.addToCart(sessionId, userId, productId, skuId, skuLabel, quantity);
+            } else {
+                item = cartService.addToCart(sessionId, productId, skuId, skuLabel, quantity);
+            }
+            metricsService.cartTool(true);
+        } catch (Exception e) {
+            metricsService.cartTool(false);
+            throw e;
         }
         return ResponseEntity.ok(item);
     }
@@ -55,10 +65,16 @@ public class CartController {
         Long userId = jwtAuthFilter.getUserId(request);
         log.info("==> DELETE /api/cart/{} | sessionId={} | userId={}", id, sessionId, userId);
         boolean removed;
-        if (userId != null) {
-            removed = cartService.removeFromCart(id, userId);
-        } else {
-            removed = cartService.removeFromCart(id, sessionId);
+        try {
+            if (userId != null) {
+                removed = cartService.removeFromCart(id, userId);
+            } else {
+                removed = cartService.removeFromCart(id, sessionId);
+            }
+            metricsService.cartTool(removed);
+        } catch (Exception e) {
+            metricsService.cartTool(false);
+            throw e;
         }
         return removed ? ResponseEntity.ok().build() : ResponseEntity.notFound().build();
     }

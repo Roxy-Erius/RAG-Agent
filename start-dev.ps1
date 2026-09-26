@@ -1,7 +1,8 @@
 ﻿# ============================================================
 #  RagAgent one-click dev launcher
 #  Backend : Spring Boot (http://localhost:8080) + local Embedding (8001, auto-started by backend)
-#  Frontend: Vite (http://localhost:5173)
+#  Frontend: Vite storefront  (http://localhost:5173)
+#  Admin   : Vite admin console (http://localhost:5174)
 #  Usage   : powershell -NoProfile -ExecutionPolicy Bypass -File .\start-dev.ps1
 # ============================================================
 
@@ -9,6 +10,7 @@ $ErrorActionPreference = 'Stop'
 $rootDir = Split-Path -Parent $MyInvocation.MyCommand.Path
 $serverDir = Join-Path $rootDir 'server'
 $webDir    = Join-Path $rootDir 'web'
+$adminDir  = Join-Path $rootDir 'admin'
 
 Write-Host ""
 Write-Host "============================================================" -ForegroundColor Cyan
@@ -17,7 +19,7 @@ Write-Host "============================================================" -Foreg
 Write-Host ""
 
 # ---------- 1. preflight ----------
-Write-Host "[1/5] Checking environment..." -ForegroundColor Green
+Write-Host "[1/6] Checking environment..." -ForegroundColor Green
 $missing = @()
 if (-not (Get-Command node -ErrorAction SilentlyContinue)) { $missing += "node" }
 if (-not (Get-Command npm -ErrorAction SilentlyContinue))  { $missing += "npm" }
@@ -42,31 +44,36 @@ Write-Host "  Env OK (node/npm/mvn)" -ForegroundColor Green
 
 # ---------- 2. frontend deps ----------
 Write-Host ""
-Write-Host "[2/5] Checking frontend deps..." -ForegroundColor Green
-if (Test-Path (Join-Path $webDir 'node_modules')) {
-    Write-Host "  node_modules exists, skipping npm install" -ForegroundColor Green
-} else {
-    Write-Host "  First run, running npm install ..." -ForegroundColor Yellow
-    Push-Location $webDir
-    npm install
-    Pop-Location
+Write-Host "[2/6] Checking frontend deps..." -ForegroundColor Green
+foreach ($dir in @(@{ Path = $webDir;   Name = "storefront" },
+                   @{ Path = $adminDir; Name = "admin" })) {
+    if (Test-Path (Join-Path $dir.Path 'node_modules')) {
+        Write-Host "  $($dir.Name): node_modules exists, skipping npm install" -ForegroundColor Green
+    } else {
+        Write-Host "  $($dir.Name): first run, running npm install ..." -ForegroundColor Yellow
+        Push-Location $dir.Path
+        npm install
+        Pop-Location
+    }
 }
 
 # ---------- 3. port check ----------
 Write-Host ""
-Write-Host "[3/5] Checking ports..." -ForegroundColor Green
-$portBackend = 8080
+Write-Host "[3/6] Checking ports..." -ForegroundColor Green
+$portBackend  = 8080
 $portFrontend = 5173
+$portAdmin    = 5174
 function Test-PortListen($port) {
     $conn = Get-NetTCPConnection -LocalPort $port -State Listen -ErrorAction SilentlyContinue
     return [bool]$conn
 }
-if (Test-PortListen $portBackend) { Write-Host "  [info] port $portBackend busy, backend may already run (reuse)." -ForegroundColor Yellow }
-if (Test-PortListen $portFrontend) { Write-Host "  [info] port $portFrontend busy, frontend may already run (reuse)." -ForegroundColor Yellow }
+if (Test-PortListen $portBackend)  { Write-Host "  [info] port $portBackend busy, backend may already run (reuse)." -ForegroundColor Yellow }
+if (Test-PortListen $portFrontend) { Write-Host "  [info] port $portFrontend busy, storefront may already run (reuse)." -ForegroundColor Yellow }
+if (Test-PortListen $portAdmin)    { Write-Host "  [info] port $portAdmin busy, admin may already run (reuse)." -ForegroundColor Yellow }
 
 # ---------- 4. backend ----------
 Write-Host ""
-Write-Host "[4/5] Starting backend (Spring Boot + auto Embedding)..." -ForegroundColor Green
+Write-Host "[4/6] Starting backend (Spring Boot + auto Embedding)..." -ForegroundColor Green
 Push-Location $serverDir
 $backend = Start-Process -FilePath $mvn -ArgumentList "spring-boot:run" -PassThru -WindowStyle Hidden
 Pop-Location
@@ -84,23 +91,26 @@ if ($backendReady) {
     Write-Host "         Check log: server\logs\..." -ForegroundColor Yellow
 }
 
-# ---------- 5. frontend ----------
+# ---------- 5. storefront frontend ----------
 Write-Host ""
-Write-Host "[5/5] Starting frontend (Vite)..." -ForegroundColor Green
-$npmCmd = (Get-Command npm.cmd -ErrorAction SilentlyContinue) | Select-Object -ExpandProperty Source
-if (-not $npmCmd) { $npmCmd = (Get-Command npm -ErrorAction SilentlyContinue) | Select-Object -ExpandProperty Source }
-Push-Location $webDir
+Write-Host "[5/6] Starting storefront (Vite)..." -ForegroundColor Green
 $frontend = Start-Process -FilePath "cmd.exe" -ArgumentList "/c", "npm run dev" -WorkingDirectory $webDir -PassThru -WindowStyle Hidden
-Pop-Location
+Start-Sleep -Seconds 3
+
+# ---------- 6. admin frontend ----------
+Write-Host ""
+Write-Host "[6/6] Starting admin console (Vite)..." -ForegroundColor Green
+$admin = Start-Process -FilePath "cmd.exe" -ArgumentList "/c", "npm run dev" -WorkingDirectory $adminDir -PassThru -WindowStyle Hidden
 Start-Sleep -Seconds 3
 
 Write-Host ""
 Write-Host "============================================================" -ForegroundColor Cyan
 Write-Host "  All services started." -ForegroundColor Cyan
-Write-Host "  Frontend: http://localhost:$portFrontend" -ForegroundColor Green
-Write-Host "  Backend : http://localhost:$portBackend" -ForegroundColor Green
-Write-Host "  Images  : http://localhost:$portBackend/images/..." -ForegroundColor Green
+Write-Host "  Storefront : http://localhost:$portFrontend" -ForegroundColor Green
+Write-Host "  Admin      : http://localhost:$portAdmin  (login: admin)" -ForegroundColor Green
+Write-Host "  Backend    : http://localhost:$portBackend" -ForegroundColor Green
+Write-Host "  Images     : http://localhost:$portBackend/images/..." -ForegroundColor Green
 Write-Host "============================================================" -ForegroundColor Cyan
-Write-Host "  Backend PID: $($backend.Id) | Frontend PID: $($frontend.Id)" -ForegroundColor DarkGray
+Write-Host "  Backend PID: $($backend.Id) | Storefront PID: $($frontend.Id) | Admin PID: $($admin.Id)" -ForegroundColor DarkGray
 Write-Host "  Close this window or Ctrl+C to stop." -ForegroundColor DarkGray
 Write-Host ""

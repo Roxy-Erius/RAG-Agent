@@ -7,6 +7,7 @@ import com.ragagent.security.JwtUtil;
 import com.ragagent.security.JwtAuthFilter;
 import com.ragagent.service.UserService;
 import com.ragagent.service.CartService;
+import com.ragagent.service.LogEventService;
 import jakarta.servlet.http.HttpServletRequest;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -23,13 +24,16 @@ public class AuthController {
     private final JwtUtil jwtUtil;
     private final JwtAuthFilter jwtAuthFilter;
     private final CartService cartService;
+    private final LogEventService logEventService;
 
     public AuthController(UserService userService, JwtUtil jwtUtil,
-                          JwtAuthFilter jwtAuthFilter, CartService cartService) {
+                          JwtAuthFilter jwtAuthFilter, CartService cartService,
+                          LogEventService logEventService) {
         this.userService = userService;
         this.jwtUtil = jwtUtil;
         this.jwtAuthFilter = jwtAuthFilter;
         this.cartService = cartService;
+        this.logEventService = logEventService;
     }
 
     @PostMapping("/register")
@@ -44,6 +48,7 @@ public class AuthController {
         }
         try {
             User user = userService.register(req.getUsername(), req.getPassword());
+            logEventService.action("AUTH", "注册成功 username=" + user.getUsername() + " userId=" + user.getId());
             return ResponseEntity.ok(Map.of("message", "注册成功", "userId", user.getId()));
         } catch (IllegalArgumentException e) {
             return ResponseEntity.badRequest().body(Map.of("error", e.getMessage()));
@@ -55,10 +60,15 @@ public class AuthController {
         log.info("==> POST /api/auth/login | username={}", req.getUsername());
         User user = userService.login(req.getUsername(), req.getPassword());
         if (user == null) {
+            logEventService.action("AUTH", "登录失败 username=" + req.getUsername());
             return ResponseEntity.status(401).body(Map.of("error", "用户名或密码错误"));
         }
-        String token = jwtUtil.generateToken(user.getId(), user.getUsername());
-        return ResponseEntity.ok(Map.of("token", token, "username", user.getUsername()));
+        logEventService.action("AUTH", "登录成功 username=" + user.getUsername() + " userId=" + user.getId());
+        String token = jwtUtil.generateToken(user.getId(), user.getUsername(), user.getRole());
+        return ResponseEntity.ok(Map.of(
+                "token", token,
+                "username", user.getUsername(),
+                "role", user.getRole() != null ? user.getRole() : "USER"));
     }
 
     @PostMapping("/link-session")

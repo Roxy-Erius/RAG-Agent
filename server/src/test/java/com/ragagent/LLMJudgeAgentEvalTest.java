@@ -1,42 +1,31 @@
 package com.ragagent;
 
-import com.ragagent.judge.JudgeRubrics;
-import com.ragagent.judge.LLmJudge;
-import com.ragagent.judge.LLmJudge.*;
-import com.ragagent.model.ProductSearchResult;
-import com.ragagent.service.ChatService;
+import com.ragagent.judge.JudgeEvalService;
+import com.ragagent.judge.JudgeEvalService.CaseResult;
+import com.ragagent.judge.JudgeEvalService.EvalCase;
+import com.ragagent.judge.JudgeEvalService.RunSummary;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 
 import java.util.List;
 
-
 /**
- * 真实 Agent 评测：跑真 agent 生成回复 → 用 LlmJudge 三维度打分 → 汇总报告。
+ * 真实 Agent 评测：跑真 agent 生成回复 → 三维度 LLM-as-Judge 打分 → 落库 + 控制台报告。
  *
- * 前置：Ollama 在跑（m-prometheus）；MySQL/ChromaDB 可达；embedding 会自动拉起。
- * 运行：mvn -f server/pom.xml test -Dtest=LlmJudgeAgentEvalTest
+ * <p>前置：Ollama 在跑（m-prometheus）；MySQL/ChromaDB 可达；embedding 会自动拉起。
+ * 运行：mvn -f server/pom.xml test -Dtest=LLMJudgeAgentEvalTest
  *
- * 注意：reference（满分示范）必须填；startsWith "满分示范"是为了给裁判锚点，
- * 空 reference 会让裁判把"不在 reference 里的"都当编造 → 好回复也判低分。
+ * <p>结果会写入 judge_runs / judge_cases，可在管理后台「评测」页看每次迭代的进步/退步。
  */
-
 @SpringBootTest
 public class LLMJudgeAgentEvalTest {
-    @Autowired
-    ChatService chatService;
-    @Autowired
-    LLmJudge judge;
-    /** 一条评测用例：query + 该 query 的"满分示范"回答（gold） */
-    record EvalCase(String query, String goldReply) {}
 
-    /** 忠实度维度用的标准说明式 reference（不绑定具体商品，避免"没推荐 gold 就算编造"） */
-    private static final String FAITH_REFERENCE =
-            "回答仅使用检索结果中出现的商品、价格与卖点，不添加任何未在检索结果中提及的信息。";
-    /** 语气维度用统一的满分示范（风格与具体 query 无关） */
-    private static final String TONE_REFERENCE =
-            "这款商品质地很清爽，很适合你的需求，需要我帮你加入购物车吗？";
+    @Autowired
+    JudgeEvalService judgeEvalService;
+
+    /** 本次运行的备注（写进 judge_runs.note），改完 prompt/rubric 后记得改这里，方便对比 */
+    private static final String NOTE = "基线：当前 prompt/rubric";
 
     /** 15 条评测集（都带足信息，避免 agent 追问；最后一条测"库里没有时会不会老实承认"） */
     private static final List<EvalCase> CASES = List.of(
@@ -79,52 +68,15 @@ public class LLMJudgeAgentEvalTest {
 
     @Test
     void evalRealAgent() {
-        int n = CASES.size();
-        double sumRel = 0, sumTone = 0, sumFaith = 0;
+        RunSummary s = judgeEvalService.run(CASES, NOTE);
 
         System.out.println("\n===== 真实 Agent 评测（LLM-as-Judge）=====");
-        for (int i = 0; i < n; i++) {
-            EvalCase c = CASES.get(i);
-            String session = "eval-" + i;   // 每条独立 session，避免对话历史互相影响
-
-            // 1) 真 agent 生成回复 + 拿到它本次实际使用的检索商品（同一批，避免上下文不一致）
-            ChatService.ChatResult result = chatService.chatWithContext(session, null, null, c.query());
-            String reply = result.reply();
-
-            // 2) 召回上下文（忠实度维度的判断依据）= agent 真实用到的那批商品
-            String context = buildContext(result.products());
-
-            // 3) 三维度裁判（一次一个 rubric，共 3 次调用）
-            JudgeResult rel   = judge.judge(c.query(), reply, c.goldReply(), JudgeRubrics.RELEVANCE);
-            JudgeResult tone  = judge.judge(c.query(), reply, TONE_REFERENCE, JudgeRubrics.TONE);
-            JudgeResult faith = judge.judge(context + "\n" + c.query(), reply, FAITH_REFERENCE, JudgeRubrics.FAITHFULNESS);
-
-            sumRel += rel.score();
-            sumTone += tone.score();
-            sumFaith += faith.score();
-
-            System.out.printf("%n[Q] %s%n[召回] %s%n[回复] %s%n[分] 相关性=%d 语气=%d 忠实度=%d%n",
-                    c.query(), context.replace("\n", " "), reply, rel.score(), tone.score(), faith.score());
+        for (CaseResult c : s.cases()) {
+            System.out.printf("%n[Q] %s%n[召回] %s%n[回复] %s%n[分] 相关性=%d 语气=%d 忠实度=%d (%.0fms)%n",
+                    c.query(), c.context().replace("\n", " "), c.reply(),
+                    c.relevance(), c.tone(), c.faithfulness(), (double) c.elapsedMs());
         }
-
-        System.out.printf("%n===== 汇总（%d 条）=====%n相关性=%.2f  语气=%.2f  忠实度=%.2f%n",
-                n, sumRel / n, sumTone / n, sumFaith / n);
+        System.out.printf("%n===== 汇总（runId=%d，%d 条）=====%n相关性=%.2f  语气=%.2f  忠实度=%.2f%n",
+                s.runId(), s.caseCount(), s.avgRelevance(), s.avgTone(), s.avgFaithfulness());
     }
-
-    /** 把召回的商品拼成"唯一事实来源"文本，供忠实度维度判断有无编造 */
-    private String buildContext(List<ProductSearchResult> products) {
-        StringBuilder sb = new StringBuilder("【检索到的商品（唯一事实来源，回复只能基于以下信息）】\n");
-        if (products == null || products.isEmpty()) {
-            sb.append("（无）\n");
-            return sb.toString();
-        }
-        for (ProductSearchResult p : products) {
-            sb.append(String.format("- %s（%s，¥%.0f）：%s%n",
-                    p.getTitle(), p.getCategory(), p.getBasePrice(),
-                    p.getMarketingDescription() == null ? "" : p.getMarketingDescription()));
-        }
-        return sb.toString();
-    }
-
-
 }
