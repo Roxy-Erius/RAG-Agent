@@ -1,0 +1,17 @@
+# ============================================================
+#  Prometheus 配置：告诉它去哪儿抓指标
+# ============================================================
+
+global:
+  scrape_interval: 15s      # 每 15 秒抓一次
+  evaluation_interval: 15s  # 告警规则评估间隔（本阶段不用告警）
+
+scrape_configs:
+  # 抓取 Spring Boot 后端（Actuator 暴露的 Prometheus 端点）
+  - job_name: 'rag-backend'
+    metrics_path: '/actuator/prometheus'
+    static_configs:
+      # 后端跑在宿主机(Windows)的 8080，容器内用 host.docker.internal 访问宿主
+      - targets: ['host.docker.internal:8080']
+        labels:
+          application: rag-server

@@ -1,0 +1,99 @@
+{
+  "uid": "rag-agent",
+  "title": "RAG Agent · 业务与系统指标",
+  "tags": ["rag", "agent"],
+  "timezone": "browser",
+  "schemaVersion": 39,
+  "version": 2,
+  "refresh": "10s",
+  "time": { "from": "now-1h", "to": "now" },
+  "panels": [
+    {
+      "id": 1,
+      "type": "stat",
+      "title": "SSE 活跃连接",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "h": 9, "w": 12, "x": 0, "y": 0 },
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"] }, "colorMode": "value", "graphMode": "area" },
+      "targets": [ { "refId": "A", "expr": "sse_active_connections", "legendFormat": "活跃连接" } ]
+    },
+    {
+      "id": 2,
+      "type": "timeseries",
+      "title": "购物车工具调用速率 (次/秒)",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "h": 9, "w": 12, "x": 12, "y": 0 },
+      "targets": [
+        { "refId": "A", "expr": "sum(rate(cart_tool_calls_total[5m])) by (result)", "legendFormat": "{{result}}" }
+      ]
+    },
+    {
+      "id": 3,
+      "type": "timeseries",
+      "title": "RAG 检索耗时",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "h": 9, "w": 12, "x": 0, "y": 9 },
+      "fieldConfig": { "defaults": { "unit": "s" }, "overrides": [] },
+      "targets": [
+        { "refId": "A", "expr": "histogram_quantile(0.95, sum(rate(rag_retrieval_duration_seconds_bucket[5m])) by (le))", "legendFormat": "P95" },
+        { "refId": "B", "expr": "sum(rate(rag_retrieval_duration_seconds_sum[5m])) / sum(rate(rag_retrieval_duration_seconds_count[5m]))", "legendFormat": "均值" }
+      ]
+    },
+    {
+      "id": 4,
+      "type": "timeseries",
+      "title": "LLM 首 token 延迟",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "h": 9, "w": 12, "x": 12, "y": 9 },
+      "fieldConfig": { "defaults": { "unit": "s" }, "overrides": [] },
+      "targets": [
+        { "refId": "A", "expr": "histogram_quantile(0.95, sum(rate(llm_first_token_duration_seconds_bucket[5m])) by (le))", "legendFormat": "P95" },
+        { "refId": "B", "expr": "sum(rate(llm_first_token_duration_seconds_sum[5m])) / sum(rate(llm_first_token_duration_seconds_count[5m]))", "legendFormat": "均值" }
+      ]
+    },
+    {
+      "id": 5,
+      "type": "timeseries",
+      "title": "LLM 整轮耗时",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "h": 9, "w": 12, "x": 0, "y": 18 },
+      "fieldConfig": { "defaults": { "unit": "s" }, "overrides": [] },
+      "targets": [
+        { "refId": "A", "expr": "histogram_quantile(0.95, sum(rate(llm_total_duration_seconds_bucket[5m])) by (le))", "legendFormat": "P95" },
+        { "refId": "B", "expr": "sum(rate(llm_total_duration_seconds_sum[5m])) / sum(rate(llm_total_duration_seconds_count[5m]))", "legendFormat": "均值" }
+      ]
+    },
+    {
+      "id": 6,
+      "type": "timeseries",
+      "title": "HTTP 请求速率 (按接口)",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "h": 9, "w": 12, "x": 12, "y": 18 },
+      "targets": [
+        { "refId": "A", "expr": "sum(rate(http_server_requests_seconds_count[5m])) by (uri)", "legendFormat": "{{uri}}" }
+      ]
+    },
+    {
+      "id": 7,
+      "type": "timeseries",
+      "title": "JVM 堆内存使用",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "h": 9, "w": 12, "x": 0, "y": 27 },
+      "fieldConfig": { "defaults": { "unit": "bytes" }, "overrides": [] },
+      "targets": [
+        { "refId": "A", "expr": "jvm_memory_used_bytes{area=\"heap\"}", "legendFormat": "{{id}}" }
+      ]
+    },
+    {
+      "id": 8,
+      "type": "timeseries",
+      "title": "HTTP 接口延迟 P95",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "h": 9, "w": 12, "x": 12, "y": 27 },
+      "fieldConfig": { "defaults": { "unit": "s" }, "overrides": [] },
+      "targets": [
+        { "refId": "A", "expr": "histogram_quantile(0.95, sum(rate(http_server_requests_seconds_bucket[5m])) by (le, uri))", "legendFormat": "{{uri}}" }
+      ]
+    }
+  ]
+}

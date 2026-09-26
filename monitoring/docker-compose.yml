@@ -1,0 +1,57 @@
+# ============================================================
+#  RagAgent 可观测性栈：Prometheus(指标采集/存储) + Grafana(可视化)
+#  用法：
+#    cd monitoring
+#    docker compose up -d          # 启动
+#    docker compose logs -f        # 看日志
+#    docker compose down           # 停止（保留数据卷）
+#    docker compose down -v        # 停止并删除数据
+#  访问：
+#    Prometheus http://localhost:9090
+#    Grafana    http://localhost:3000  (admin / admin)
+# ============================================================
+
+services:
+  prometheus:
+    image: prom/prometheus:v2.55.0
+    container_name: rag-prometheus
+    ports:
+      - "9090:9090"
+    volumes:
+      # 配置：把宿主机上的 prometheus.yml 挂进容器（只读）
+      - ./prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      # 数据卷：指标数据持久化，容器重建也不丢
+      - prometheus-data:/prometheus
+    # 让容器内能通过 host.docker.internal 访问宿主机(Windows 上的后端 8080)
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    restart: unless-stopped
+
+  grafana:
+    image: grafana/grafana:11.3.0
+    container_name: rag-grafana
+    ports:
+      - "3000:3000"
+    environment:
+      GF_SECURITY_ADMIN_USER: admin
+      GF_SECURITY_ADMIN_PASSWORD: admin
+      GF_USERS_ALLOW_SIGN_UP: "false"
+      # 允许被 iframe 嵌入（管理后台的"监控"页）
+      GF_SECURITY_ALLOW_EMBEDDING: "true"
+      GF_SECURITY_COOKIE_SAMESITE: "disabled"
+      # 匿名只读：嵌入时无需在 Grafana 二次登录（仅本机开发用）
+      GF_AUTH_ANONYMOUS_ENABLED: "true"
+      GF_AUTH_ANONYMOUS_ORG_ROLE: Viewer
+    volumes:
+      # provisioning：启动时自动配置数据源 + 加载看板（免手工点）
+      - ./grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./grafana/dashboards:/var/lib/grafana/dashboards:ro
+      # Grafana 自身数据（用户/偏好）持久化
+      - grafana-data:/var/lib/grafana
+    depends_on:
+      - prometheus
+    restart: unless-stopped
+
+volumes:
+  prometheus-data:
+  grafana-data:
