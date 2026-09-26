@@ -1,17 +1,47 @@
 import { useState, useRef, useEffect, useCallback } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
-import { X, Send, ShoppingCart } from 'lucide-react';
+import { X, Send, ShoppingCart, History } from 'lucide-react';
 import { Mascot } from './Mascot';
 import { DesktopPet } from './DesktopPet';
+import { ConversationHistory } from './ConversationHistory';
 import { sseChat } from '../../lib/sse';
 import { getSessionId } from '../../lib/session';
-import { productApi, cartApi } from '../../lib/api';
+import { getStoredConversationId, storeConversationId } from '../../lib/conversation';
+import { stripChatTags } from '../../lib/chatTags';
+import { productApi, cartApi, conversationApi } from '../../lib/api';
 import { useCartStore } from '../../store/cart';
+import { useAuthStore } from '../../store/auth';
 import { useAgentContext } from '../../store/agent';
-import { ChatMessage, Product, SSEEvent } from '../../types';
+import { ChatMessage, Product, SSEEvent, HistoryMessage } from '../../types';
 import { ProductCard } from '../ProductCard';
 import { Button } from '../ui/button';
 import { cn } from '../../lib/utils';
+
+/** 把后端历史消息（含 productIds / 结构化标签）映射成前端气泡 */
+async function mapHistory(msgs: HistoryMessage[]): Promise<ChatMessage[]> {
+  return Promise.all(
+    msgs.map(async (m) => {
+      let cards: Product[] = [];
+      if (m.productIds) {
+        try {
+          const ids = JSON.parse(m.productIds) as string[];
+          cards = (
+            await Promise.all(ids.map((id) => productApi.detail(id).catch(() => null)))
+          ).filter((p): p is Product => !!p);
+        } catch {
+          /* 忽略非法 productIds */
+        }
+      }
+      return {
+        id: 'h_' + m.id,
+        role: (m.role === 'ai' ? 'assistant' : 'user') as ChatMessage['role'],
+        text: stripChatTags(m.content || ''),
+        cards,
+        timestamp: m.createdAt ? new Date(m.createdAt).getTime() : Date.now(),
+      };
+    })
+  );
+}
 
 export function AgentDock() {
   const [open, setOpen] = useState(false);
@@ -19,16 +49,19 @@ export function AgentDock() {
   const [input, setInput] = useState('');
   const [streaming, setStreaming] = useState(false);
   const [unread, setUnread] = useState(false);
+  const [historyOpen, setHistoryOpen] = useState(false);
+  const [conversationId, setConversationId] = useState<string | null>(() => getStoredConversationId());
   const listRef = useRef<HTMLDivElement>(null);
   const navigate = useNavigate();
   const { pathname } = useLocation();
   const agentCtx = useAgentContext();
+  const token = useAuthStore((s) => s.token);
 
   const addToCart = useCartStore((s) => s.addItem);
   const clearCart = useCartStore((s) => s.clear);
   const setItems = useCartStore((s) => s.setItems);
 
-  // 会话 ID 持久化到 sessionStorage（关闭再开可恢复对话）
+  // 匿名会话 ID：localStorage 持久化
   const sessionId = getSessionId();
 
   // 自动滚动到底部
@@ -45,6 +78,53 @@ export function AgentDock() {
       agentCtx.clearContext();
     }
   }, [pathname]);
+
+  // 登录后恢复上次会话的历史消息（BUG-002）
+  useEffect(() => {
+    if (!token) return;
+    const cid = getStoredConversationId();
+    if (!cid) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const msgs = await conversationApi.messages(cid);
+        if (cancelled || msgs.length === 0) return;
+        setConversationId(cid);
+        setMessages(await mapHistory(msgs));
+      } catch (e) {
+        console.warn('恢复历史消息失败', e);
+        storeConversationId(null);
+        setConversationId(null);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [token]);
+
+  // 选中历史会话 → 加载其消息
+  const handleSelectConversation = useCallback(async (cid: string) => {
+    try {
+      const msgs = await conversationApi.messages(cid);
+      storeConversationId(cid);
+      setConversationId(cid);
+      setMessages(await mapHistory(msgs));
+      setHistoryOpen(false);
+      setOpen(true);
+      setUnread(false);
+    } catch (e) {
+      console.warn('加载会话失败', e);
+    }
+  }, []);
+
+  // 开新对话
+  const handleNewConversation = useCallback(() => {
+    storeConversationId(null);
+    setConversationId(null);
+    setMessages([]);
+    setHistoryOpen(false);
+    setInput('');
+  }, []);
 
   const handleSend = useCallback(() => {
     const text = input.trim();
@@ -93,11 +173,16 @@ export function AgentDock() {
         setStreaming(false);
         setMessages((prev) => prev.map((m) => (m.id === assistantId ? { ...m, streaming: false } : m)));
         if (!open) setUnread(true);
+        // 首轮后端返回 conversationId → 持久化，后续轮次复用（BUG-002）
+        if (evt.conversationId && !conversationId) {
+          storeConversationId(evt.conversationId);
+          setConversationId(evt.conversationId);
+        }
       }
     };
 
     sseChat(
-      { message: text, sessionId, conversationId: undefined, token: undefined },
+      { message: text, sessionId, conversationId: conversationId ?? undefined, token: token ?? undefined },
       onEvent,
       (err) => {
         console.error('SSE error', err);
@@ -111,7 +196,7 @@ export function AgentDock() {
         );
       }
     );
-  }, [input, streaming, open, sessionId]);
+  }, [input, streaming, open, sessionId, conversationId, token]);
 
   const handleCartAction = async (action: { type: string; productId?: string; label?: string; quantity?: number; cartItemId?: number }): Promise<boolean> => {
     try {
@@ -184,10 +269,25 @@ export function AgentDock() {
               {agentCtx.productId ? `正在看：${agentCtx.productTitle || agentCtx.productId}` : '在线 · 随时为你挑选好物'}
             </div>
           </div>
+          {token && (
+            <Button variant="ghost" size="icon" onClick={() => setHistoryOpen((v) => !v)} title="历史对话">
+              <History className="h-4 w-4" />
+            </Button>
+          )}
           <Button variant="ghost" size="icon" onClick={() => setOpen(false)}>
             <X className="h-4 w-4" />
           </Button>
         </div>
+
+        {/* 历史对话抽屉（登录用户）*/}
+        {historyOpen && (
+          <ConversationHistory
+            currentId={conversationId}
+            onSelect={handleSelectConversation}
+            onNew={handleNewConversation}
+            onClose={() => setHistoryOpen(false)}
+          />
+        )}
 
         {/* messages */}
         <div ref={listRef} className="flex-1 overflow-y-auto px-4 py-4 space-y-4">

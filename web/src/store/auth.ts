@@ -2,6 +2,7 @@ import { create } from 'zustand';
 import { authApi } from '../lib/api';
 import { clearAuth, getToken, getUsername, saveAuth } from '../lib/auth';
 import { getSessionId } from '../lib/session';
+import { storeConversationId } from '../lib/conversation';
 
 interface AuthState {
   token: string | null;
@@ -24,6 +25,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     try {
       const res = await authApi.login({ username, password });
       saveAuth({ token: res.token, username });
+      storeConversationId(null); // 换用户 → 清掉上一位的当前会话，避免串会话
       set({ token: res.token, username });
       await get().linkSession(res.token).catch((e) => console.warn('绑定会话失败', e));
     } finally {
@@ -42,6 +44,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
 
   logout: () => {
     clearAuth();
+    storeConversationId(null);
     set({ token: null, username: null });
   },
 

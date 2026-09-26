@@ -93,6 +93,25 @@ export interface ChatMessage {
   timestamp: number;
 }
 
+// ===== 会话（长期记忆，登录用户）=====
+export interface Conversation {
+  id: number;              // DB 自增 id
+  userId: number;
+  conversationId: string;  // UUID，对前端暴露
+  title?: string;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
+export interface HistoryMessage {
+  id: number;
+  conversationId: number;  // 对应 conversations.id
+  role: 'user' | 'ai';
+  content: string;
+  productIds?: string | null; // JSON 字符串，如 '["p_beauty_007"]'
+  createdAt?: string;
+}
+
 // ===== 分页响应 =====
 export interface PageResp<T> {
   items: T[];

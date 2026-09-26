@@ -86,12 +86,15 @@ export function Navbar() {
               </span>
               <span className="text-sm text-[hsl(var(--ink))] max-w-[80px] truncate">{username}</span>
             </span>
-            <button
-              onClick={() => { logout(); navigate('/home'); }}
-              className="absolute top-full right-0 mt-2 hidden group-hover:block px-3 py-1.5 text-xs text-[hsl(var(--ink-soft))] bg-[hsl(var(--surface))] border border-[hsl(var(--line))] rounded-[var(--radius-sm)] shadow-soft hover:bg-[hsl(var(--surface-2))]"
-            >
-              退出登录
-            </button>
+            {/* pt-2 把"头像与菜单之间的空隙"并入悬浮区：鼠标移向退出按钮时菜单不会消失 */}
+            <div className="absolute top-full right-0 pt-2 hidden group-hover:block">
+              <button
+                onClick={() => { logout(); navigate('/home'); }}
+                className="block px-3 py-1.5 text-xs whitespace-nowrap text-[hsl(var(--ink-soft))] bg-[hsl(var(--surface))] border border-[hsl(var(--line))] rounded-[var(--radius-sm)] shadow-soft hover:bg-[hsl(var(--surface-2))]"
+              >
+                退出登录
+              </button>
+            </div>
           </div>
         ) : (
           <Link to="/login" className="shrink-0 px-3 py-1.5 rounded-full text-sm font-medium btn-warm">

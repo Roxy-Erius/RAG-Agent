@@ -111,9 +111,9 @@ export const behaviorApi = {
 
 export const conversationApi = {
   list: (q = '') =>
-    api.get(`/conversations`, { params: { q } }).then((r) => r.data),
+    api.get<import('../types').Conversation[]>(`/conversations`, { params: { q } }).then((r) => r.data),
   messages: (id: string) =>
-    api.get(`/conversations/${id}/messages`).then((r) => r.data),
+    api.get<import('../types').HistoryMessage[]>(`/conversations/${id}/messages`).then((r) => r.data),
   remove: (id: string) =>
     api.delete(`/conversations/${id}`).then((r) => r.data),
 };
